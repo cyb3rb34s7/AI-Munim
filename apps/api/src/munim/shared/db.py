@@ -17,6 +17,9 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from munim.shared.config import get_settings
 
+DEFAULT_MERCHANT_ID = "m_default"
+DEFAULT_MERCHANT_NAME = "Default Merchant"
+
 
 @lru_cache
 def get_engine() -> Engine:
@@ -25,19 +28,29 @@ def get_engine() -> Engine:
 
 
 def init_db() -> None:
-    """Create tables for any SQLModel subclasses imported at startup.
+    """Create the universal-schema tables and seed the single-tenant merchant."""
+    # Importing the models package registers every table on SQLModel.metadata.
+    import munim.models  # noqa: F401
 
-    Phase 1 has no models yet; this is the seam where the universal `record`,
-    `merchant`, `connector_credentials`, and `run_log` tables (architecture.md §4.1)
-    are created when Phase 2 imports them.
-    """
-    SQLModel.metadata.create_all(get_engine())
+    engine = get_engine()
+    SQLModel.metadata.create_all(engine)
+    _seed_default_merchant(engine)
 
 
 def get_session() -> Generator[Session, None, None]:
     """FastAPI dependency."""
     with Session(get_engine()) as session:
         yield session
+
+
+def _seed_default_merchant(engine: Engine) -> None:
+    from munim.models import Merchant
+
+    with Session(engine) as session:
+        if session.get(Merchant, DEFAULT_MERCHANT_ID) is not None:
+            return
+        session.add(Merchant(id=DEFAULT_MERCHANT_ID, name=DEFAULT_MERCHANT_NAME))
+        session.commit()
 
 
 def _engine_kwargs(url: str) -> dict[str, Any]:

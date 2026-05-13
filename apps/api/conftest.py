@@ -15,6 +15,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlmodel import Session
 
 
 @pytest.fixture(autouse=True)
@@ -32,10 +33,23 @@ def _isolated_sqlite(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, N
         try:
             yield
         finally:
-            # Release the SQLite file handle before TemporaryDirectory deletes it.
             get_engine().dispose()
             get_settings.cache_clear()
             get_engine.cache_clear()
+
+
+@pytest.fixture
+def session() -> Generator[Session, None, None]:
+    """Real SQLite session against the autouse temp DB.
+
+    Calls `init_db()` so tables exist and the default merchant is seeded
+    before the test sees the session.
+    """
+    from munim.shared.db import get_engine, init_db
+
+    init_db()
+    with Session(get_engine()) as s:
+        yield s
 
 
 @pytest.fixture
