@@ -8,10 +8,11 @@
 
 ## Now
 
-Phase 2 complete. Universal schema + RowSink + ShopifyConnector demo sync working end-to-end. All checks green:
-- Backend: `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, `uv run pytest` — all pass (35/35 tests).
+Phase 2 complete + reviewer findings applied. Universal schema + RowSink + ShopifyConnector demo sync working end-to-end. All checks green:
+- Backend: `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, `uv run pytest` — all pass (36/36 tests after the review-cycle fix added one).
 - Tables: `['connector_credentials', 'merchant', 'record', 'run_log']` created by `init_db()`, default merchant seeded.
 - Demo sync: `ShopifyConnector.sync_full()` reads frozen `orders.json`, maps 3 orders (COD/prepaid/partial) to `Order` Pydantic, writes to `record` table with full provenance. Second run is idempotent (0 upserts, 3 skipped).
+- Time handling tightened: timestamps now normalize to UTC and fail-loud on missing timezone info (post-review fix; two new paid lessons below).
 
 **Next:** Phase 3 — API endpoints to trigger the sync + connector management UI + real OAuth scaffold.
 
@@ -23,7 +24,7 @@ Phase 2 complete. Universal schema + RowSink + ShopifyConnector demo sync workin
 - 2026-05-13 — `docs/requirements.md`, `docs/architecture.md`, `docs/research.md` written (pre-existing in repo, refined this session).
 - 2026-05-13 — Governance setup: `docs/conventions.md`, `CLAUDE.md`, `CHANGELOG.md`, `context.md` (this file).
 - 2026-05-13 — **Phase 1 complete.** Monorepo skeleton, backend foundations (config, logging, trace, errors, responses, db, constants), `/health` module with 6 tests, frontend scaffold (Vite + React 19 + Tailwind v4 + theme), shared API client (ky + Zod envelope unwrap), Zustand theme store, TanStack Query client, dumb `HealthCard` + connector `HealthSection`. Dev infra: pre-commit, GitHub Actions CI, `docker-compose.yml`. End-to-end live-verified. See `CHANGELOG.md` 2026-05-13 entry for details.
-- 2026-05-13 — **Phase 2 complete.** Universal 4-table schema (`merchant`, `connector_credentials`, `record`, `run_log`), `Order` Pydantic (canonical normalized shape), `BaseConnector` ABC + `RowSink` writer, `ShopifyConnector` demo sync end-to-end. 35 tests, all green. See `CHANGELOG.md` 2026-05-13 Phase 2 entry for details.
+- 2026-05-13 — **Phase 2 complete.** Universal 4-table schema (`merchant`, `connector_credentials`, `record`, `run_log`), `Order` Pydantic (canonical normalized shape), `BaseConnector` ABC + `RowSink` writer, `ShopifyConnector` demo sync end-to-end. Reviewer subagent surfaced 1 critical + 4 important findings (all time-handling + extra=forbid + magic string); all applied. 36 tests, all green. See `CHANGELOG.md` 2026-05-13 Phase 2 entry for details.
 
 ---
 
@@ -55,6 +56,26 @@ Every entry is a paid lesson. Read at the start of every session. Never repeat o
 **Solution:** Renamed `ValidationFailed` → `ValidationFailedError` in `apps/api/src/munim/shared/errors.py`. Kept N818 enabled in `pyproject.toml` so future violations are caught.
 
 **Guardrail:** Every domain-error subclass in `shared/errors.py` ends in `Error`. New pattern: `ConnectorRateLimitedError`, `LLMUnavailableError`, etc. Not `ConnectorRateLimited`, etc.
+
+### 2026-05-13 (Phase 2 review) — `datetime` equality is point-in-time, not tzinfo-identity
+
+**Problem:** `test_maps_placed_at_to_utc` asserted `order.placed_at == datetime(2026, 5, 10, 3, 45, 32, tzinfo=UTC)` to prove the mapper normalized to UTC. The test passed for weeks of work even though the mapper was actually storing `+05:30`-aware datetimes — `_parse_iso` had a no-op `dt.astimezone(tz=dt.tzinfo)` instead of `dt.astimezone(UTC)`. The reviewer subagent caught both the bug and the dishonest test.
+
+**Root cause:** Python's `datetime.__eq__` compares the absolute moment in time, ignoring `tzinfo` identity. So `datetime(2026, 5, 10, 9, 15, 32, +05:30) == datetime(2026, 5, 10, 3, 45, 32, UTC)` is `True`. The test was vacuous coverage.
+
+**Solution:** Two fixes. (a) `_parse_iso` now `dt.astimezone(UTC)` so the result is always UTC. (b) `test_maps_placed_at_to_utc` now asserts `order.placed_at.tzinfo is UTC` first — the identity check that would have caught the bug. The equality assertion stays as belt-and-braces.
+
+**Guardrail:** When testing timezone normalization, assert the `tzinfo` field directly (identity, `is UTC`). Equality alone is insufficient because Python compares instants. This applies broadly: any test claiming "stored as UTC" must include an identity check, not just equality.
+
+### 2026-05-13 (Phase 2 review) — silent naive-datetime fallback in `_parse_iso`
+
+**Problem:** `_parse_iso` had `return dt.astimezone(tz=dt.tzinfo) if dt.tzinfo else dt` — when the input had no timezone, it silently returned a naive datetime. Naive datetimes in SQLite TIMESTAMP columns lose their intended timezone irrecoverably.
+
+**Root cause:** The plan accepted a "tolerant" parse path. Per §10 of `docs/conventions.md` that's a silent fallback.
+
+**Solution:** `_parse_iso` now raises `ValueError` when `dt.tzinfo is None`. Added `test_mapper_raises_when_created_at_lacks_timezone` to lock the contract.
+
+**Guardrail:** Any datetime parsing helper must raise on missing tzinfo, not silently produce a naive result. This generalizes: any "parse / convert" helper that has a fallback branch needs an explicit `raise` for the unknown-input case unless we've decided otherwise (and recorded why).
 
 ### 2026-05-13 (Phase 2) — `TYPE_CHECKING` guard + mypy `import-untyped` error when module doesn't exist yet (TDD forward-reference)
 
