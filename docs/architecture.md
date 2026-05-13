@@ -94,12 +94,13 @@ Three things to notice in that diagram:
 
 | Layer | Choice | Why |
 |---|---|---|
-| Framework | **Next.js 15** (App Router) | The most recognisable React framework in 2026. Plays nicely with Vercel AI SDK. |
-| Styling | **Tailwind v4 + shadcn/ui** | Industry-standard polished UI with minimal custom CSS. shadcn components are copied in, not imported, so they're ours to modify. |
-| LLM streaming | **Vercel AI SDK 5** | `useChat` for the conversation, Data Stream Protocol for bridging to our Python backend. Officially supported by Vercel. |
-| Charts | **Tremor** (built on Recharts) | shadcn-styled, AI-native dashboards, fewer rough edges than raw Recharts. |
-| State | TanStack Query for server state, Zustand for UI state | Standard, lean. |
-| Types | TypeScript end-to-end | Pydantic schemas mirrored as Zod schemas in `packages/shared-types`. Codegen path documented. |
+| Build tool / framework | **Vite 6 + React 19** | The frontend is a single-page admin UI. No SSR, no SEO concern, no edge-runtime story to justify the Next.js footprint. Vite gives sub-second HMR and a ~700ms production build at our current size — the iteration cost on a 4-day clock matters. The original plan picked Next.js; that decision was reversed at the start of Phase 1 build (see `CHANGELOG.md` 2026-05-13). |
+| Styling | **Tailwind v4** via the `@tailwindcss/vite` plugin | First-class Vite integration in v4. CSS variables (`@theme inline` + `:root` / `.dark` token blocks) drive both light and dark themes from one set of utility classes — no `dark:` sprinkling. shadcn/ui components can be dropped in later if a need surfaces; they're framework-agnostic. |
+| HTTP client | **ky** | Tiny fetch wrapper with retries, hooks, and typed errors. Wrapped once in `shared/api/client.ts` to enforce the envelope unwrap + Zod boundary validation; components and hooks never see the envelope. |
+| LLM streaming | **Vercel AI SDK 5** | The SDK is framework-agnostic in v5; `useChat` + Data Stream Protocol work cleanly with Vite. The "officially supported FastAPI hybrid pattern" doesn't require Next.js. |
+| Charts | **Tremor** (built on Recharts) | Clean dashboards, fewer rough edges than raw Recharts. |
+| State | TanStack Query (server state) + Zustand (UI state, persisted for theme) | Don't mix the two — TanStack already does cache/refetch/invalidation well. |
+| Types | TypeScript end-to-end | Pydantic schemas in `apps/api/src/munim/schemas/` are the source of truth; mirrored to the frontend as Zod schemas, validated at the API client boundary so contract drift fails fast. |
 
 ### Shared
 
@@ -655,7 +656,7 @@ v0:
 Going beyond v0:
 
 - `api` → containerised on Render/Railway/Fly with managed Postgres.
-- `web` → Vercel.
+- `web` → any static host (Vercel, Netlify, Cloudflare Pages) — the Vite build produces a plain `dist/` directory with `index.html` + bundled assets.
 - Sync workers → separate process group, same image, different command (`python -m munim.workers.sync`).
 - (Optional, not in v0) MCP wrapper → mount `FastMCP` on a distinct route exposing the same in-process tools, so external MCP clients can query the unified data.
 
@@ -681,6 +682,6 @@ Each of these has a one-paragraph upgrade path in the README's "what we'd do wit
 
 - Architecture patterns: **NousResearch/hermes-agent** — specifically the cron-as-first-class-data-flow, the tool registry, and the platform-agnostic core principle.
 - Generative UI shape: **Google A2UI v0.9** — typed render specs flowing from tool to renderer.
-- Streaming UX: **Vercel AI SDK + FastAPI** — using their officially supported hybrid pattern.
+- Streaming UX: **Vercel AI SDK + FastAPI** — using their officially supported hybrid pattern. The SDK is framework-agnostic in v5, so it pairs equally well with Vite-hosted React as it would with Next.js.
 - Schema shape: **MongoDB and event-sourcing literature** — the single-table polymorphic model with typed application-side schemas is a recognisably document-store-shaped design, executed on SQL.
 - Shiprocket integration awareness: **bfrs/shiprocket-mcp** — by Bigfoot Retail Solutions (Shiprocket's parent). We deliberately did not duplicate or compete with it; see §9.

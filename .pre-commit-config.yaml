@@ -1,0 +1,45 @@
+# Pre-commit hooks. Per docs/conventions.md §2.5.
+# Run locally: `pre-commit install` once, then every commit triggers these.
+# CI runs the same checks (see .github/workflows/ci.yml).
+#
+# Requires `uv` to be on PATH. Run `uv sync` in apps/api once before the first commit.
+
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check (--fix)
+        entry: uv --project apps/api run ruff check --fix
+        language: system
+        types_or: [python, pyi]
+        args: [apps/api/src]
+        pass_filenames: false
+
+      - id: ruff-format
+        name: ruff format
+        entry: uv --project apps/api run ruff format
+        language: system
+        types_or: [python, pyi]
+        args: [apps/api/src]
+        pass_filenames: false
+
+      - id: mypy
+        name: mypy
+        entry: uv --project apps/api run mypy
+        language: system
+        types: [python]
+        args: [apps/api/src]
+        pass_filenames: false
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-merge-conflict
+      - id: detect-private-key

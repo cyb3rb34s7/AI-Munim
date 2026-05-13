@@ -1,0 +1,41 @@
+# Development docker-compose. Per docs/conventions.md §13.1.
+#
+# Phase 1: api only. Frontend dev runs on the host via `pnpm --filter @munim/web dev`,
+# which Vite proxies /api/* to localhost:8000 (see apps/web/vite.config.ts).
+#
+# Dockerising Vite slows HMR and complicates volume mounts; we'll add a
+# production-mode web service (static build + nginx) when we ship a deployable
+# image, not for local dev.
+
+services:
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: munim-api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: sqlite:///./data/munim.sqlite
+      LOG_LEVEL: debug
+      APP_ENV: development
+    volumes:
+      # Mount source for hot-reload in dev.
+      - ./apps/api/src:/app/src
+      # Persist the SQLite file across container restarts.
+      - munim-data:/app/data
+    command:
+      [
+        "uv",
+        "run",
+        "uvicorn",
+        "munim.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+      ]
+
+volumes:
+  munim-data:

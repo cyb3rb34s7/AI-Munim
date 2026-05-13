@@ -25,7 +25,7 @@ MANIFEST
 venv/
 env/
 ENV/
-.python-version
+# NOTE: .python-version IS committed (pinned interpreter for the monorepo).
 
 # Test / coverage
 .pytest_cache/
@@ -38,16 +38,15 @@ htmlcov/
 coverage.xml
 *.cover
 
-# --- Node / Next.js ---
+# --- Node / Vite ---
 node_modules/
 .pnpm-store/
-.next/
 .turbo/
-out/
 .swc/
-.vercel/
+.vite/
+dist/
+out/
 *.tsbuildinfo
-next-env.d.ts
 
 # --- Env / secrets ---
 .env
@@ -59,6 +58,9 @@ next-env.d.ts
 # --- Local data / databases ---
 *.sqlite
 *.sqlite3
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
 *.db
 data/
 storage/
@@ -71,6 +73,9 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# --- Local Claude Code config ---
+.claude/settings.local.json
 
 # --- Logs ---
 *.log
