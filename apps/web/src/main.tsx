@@ -1,22 +1,25 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
+import { RouterProvider } from 'react-router-dom';
 
-import { App } from '@/app';
+import { router } from '@/router';
 import { queryClient } from '@/shared/api';
+import { ThemeProvider } from '@/shared/theme';
 
 import './styles/globals.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
-  // Fail loud — index.html guarantees this element exists.
   throw new Error('Root element #root not found in index.html.');
 }
 
 createRoot(rootElement).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </ThemeProvider>
   </StrictMode>,
 );
