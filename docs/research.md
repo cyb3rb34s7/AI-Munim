@@ -70,10 +70,10 @@ Our system has a different job:
 
 - Pull historical Shiprocket data into a universal schema with provenance.
 - Combine it with Shopify and Meta data.
-- Answer questions that no single MCP server can answer alone.
-- Optionally expose **our** unified data as our own MCP server, so any MCP client (Claude Desktop, Cursor, an A2A agent) can query across sources.
+- Answer cross-tool questions that no single vendor MCP can answer alone, with citations on every number.
+- Run an autonomous agent (RTO Risk Mitigator) that reasons across all three sources.
 
-So we use the existing official MCP where appropriate, and build the layer above it.
+`bfrs/shiprocket-mcp` shaped how we thought about the Shiprocket integration. We deliberately did not duplicate it. We also did not consume it for v0 sync — see `architecture.md` §9 for the reasoning (we kept the connector as a direct REST client to own rate-limiting, schema mapping, and provenance). The acknowledgment remains genuine; the integration shape is different.
 
 ## 3. Agent framework research
 
@@ -159,7 +159,7 @@ A "True ROAS Watcher" agent is the obvious second candidate (using Meta + Shopif
 
 - **CDP / customer data platform integrations** (Segment, Rudderstack). Out of scope for a v0 focused on cross-tool analytics with citations.
 - **Causal inference for attribution.** Northbeam/Triple Whale spend years on this. Not a v0 problem.
-- **A2A protocol** (Google's Agent-to-Agent). Our scope is one merchant's data, not inter-agent coordination. Mentioned only as a future surface for our MCP server.
+- **A2A protocol** (Google's Agent-to-Agent). Our scope is one merchant's data, not inter-agent coordination. Mentioned only as a future surface that an eventual MCP wrapper could enable.
 - **Fine-tuned domain models.** Off-the-shelf frontier models with good tool definitions are sufficient at this scale.
 
 ---

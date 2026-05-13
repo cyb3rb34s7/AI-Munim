@@ -28,13 +28,13 @@
 
 A working v0 of an AI employee for Indian D2C brands. Five-line architecture summary:
 
-1. **Three connectors behind one abstraction** — Shopify, Meta Ads, Shiprocket — pulling into one universal Pydantic schema with row-level provenance.
-2. **A chat layer** built on PydanticAI with a strict citation contract: every numerical claim is wrapped with `[cite:row_id]` markers, post-processed fail-closed so uncited numbers never reach the user.
+1. **Three connectors behind one abstraction** — Shopify, Meta Ads, Shiprocket — pulling into one universal single-table polymorphic store with row-level provenance.
+2. **A chat layer** built on PydanticAI with a strict citation contract: every numerical claim is wrapped with `[cite:record_id]` markers, post-processed fail-closed so uncited numbers never reach the user.
 3. **An autonomous agent — the RTO Risk Mitigator** — runs on a cron schedule, scans new COD orders, scores RTO risk from cross-tool signals, proposes intercept actions without ever sending them.
 4. **A scaling story** — concrete ranking of what breaks first as we go from 1 merchant to 10,000, with the parts of v0 that were built deliberately to absorb the future.
 5. **A web UI** in Next.js + shadcn/ui + Vercel AI SDK, with one-click connector setup and inline generative artifacts (A2UI-shaped render specs).
 
-The stack is hybrid: **Python FastAPI for the backend** (PydanticAI, MCP Python SDK, mature LLM/data tooling) and **Next.js for the frontend** (Vercel AI SDK 5 streaming, shadcn/ui polish, artifacts in chat). Vercel officially supports this pattern.
+The stack is hybrid: **Python FastAPI for the backend** (PydanticAI, SQLite + JSON columns, mature LLM/data tooling) and **Next.js for the frontend** (Vercel AI SDK 5 streaming, shadcn/ui polish, artifacts in chat). Vercel officially supports this pattern.
 
 ## Quickstart
 
@@ -85,17 +85,33 @@ Full landscape analysis with the WHYs for every alternative is in [`docs/researc
 
 ## Schema — why this shape
 
-A universal Pydantic-typed schema. Source-agnostic entity names (`order`, `customer`, `product`, `shipment`, `ad_campaign`, `ad_spend_daily`, `payment`). Provenance fields on every row: `source_system`, `source_id`, `merchant_id`, `fetched_at`, `payload_hash`. Original source responses preserved verbatim in a `raw_payload` table.
+**One table.** Polymorphic by `entity_type`. JSON for the shape, SQL for the queries, Pydantic for the validation.
+
+```
+record(
+  id, merchant_id,
+  source_system, source_id,           -- 'shopify' / 'meta_ads' / 'shiprocket' / <any>
+  entity_type,                        -- 'order' / 'shipment' / 'ad_spend' / <any>
+  fetched_at, payload_hash,
+  raw         JSON,                   -- the source response, verbatim (provenance)
+  normalized  JSON                    -- our canonical Pydantic shape for this entity_type
+)
+```
+
+Plus three relational tables — `merchant`, `connector_credentials`, `run_log`. **That is the entire schema.** Four tables, none entity-specific.
 
 Why this shape:
 
-- **Source-agnostic entity names.** Adding a fourth payment provider doesn't mean renaming `order.total_inr`.
-- **Provenance is row-level, not table-level.** Two connectors can enrich the same logical entity (e.g. Meta's UTM data attached to a Shopify order) without losing track of who said what.
-- **Citations resolve through provenance.** Every normalised row has a foreign-key path to the raw payload that produced it. Clicking a citation in the UI walks this path.
-- **Idempotency by natural key `(source_system, source_id)`.** Re-running sync converges to the same state.
-- **`merchant_id` is in every primary key, even in single-merchant v0.** The scale-out doesn't need a schema rewrite.
+- **It is honestly universal.** Adding a brand-new entity type (say, a CRM `deal` from HubSpot) requires zero DDL: write a `Deal` Pydantic model in code, map source response → `record` row with `entity_type='deal'`. Done.
+- **Typed shapes live in code, not in DDL.** `class Order(BaseModel)`, `class Shipment(BaseModel)`, etc. live in `apps/api/src/munim/schemas/`. Changing the shape of an `Order` is a Python change, not a migration.
+- **Provenance is structural, not aspirational.** Every row carries `source_system`, `source_id`, `fetched_at`, `payload_hash`, and the original `raw` JSON. No "we tried to track it" caveats.
+- **Citations resolve to one ID space.** Every `RowCitation` points at `record.id`. The validator has one lookup, one shape.
+- **Indexes are an optimisation, not a constraint.** Partial indexes on JSON paths (`json_extract(normalized, '$.placed_at') WHERE entity_type='order'`) speed up hot queries without changing the model.
+- **`merchant_id` on every row, even in single-merchant v0.** The scale-out partitions one table, not seven.
 
-Full schema, including SQL DDL and a discussion of money types and pincode handling, is in [`docs/architecture.md` §4](docs/architecture.md).
+**Why SQLite + JSON columns and not MongoDB?** Tradeoff written out honestly in [`docs/architecture.md` §4.7](docs/architecture.md). Short version: single-file deploy beats document-store-native ergonomics at v0 scale; the citation contract benefits from SQL-native joins to `run_log` and `connector_credentials`; the Postgres upgrade path preserves all our SQL. MongoDB is a defensible alternative; we picked the leaner one for a v0 demo.
+
+Full schema, the "adding a new connector" table, the JSON-path indexing strategy, and the MongoDB comparison are in [`docs/architecture.md` §4](docs/architecture.md).
 
 ## Chat — tool schema and how citation works
 
@@ -114,14 +130,14 @@ Every tool returns `{ data, citations, render? }`. Citations come from the tool,
 
 **How the citation contract is enforced** — four layers, all must hold:
 
-1. **Tool return shape.** Every tool emits a `ToolResult` with explicit `citations: list[RowCitation]`. Tools know which rows they touched; the LLM just quotes them.
-2. **Structured output.** The LLM's final answer is forced into a Pydantic `GroundedAnswer` shape: `text` (with `[cite:row_id]` markers inline) + `used_citations` (the row ids). No free-form prose.
-3. **Validation.** Every `[cite:N]` marker is checked against the citations the agent's tools actually returned. Hallucinated row ids fail validation → retry once → error if still failing.
+1. **Tool return shape.** Every tool emits a `ToolResult` with explicit `citations: list[RowCitation]`. Tools know which `record` rows they touched; the LLM just quotes them.
+2. **Structured output.** The LLM's final answer is forced into a Pydantic `GroundedAnswer` shape: `text` (with `[cite:record_id]` markers inline) + `used_citations` (the record ids). No free-form prose.
+3. **Validation.** Every `[cite:N]` marker is checked against the citations the agent's tools actually returned. Hallucinated record ids fail validation → retry once → error if still failing.
 4. **Fail-closed post-processor.** A regex pass over `text` finds any free-floating number not inside a `[cite:...]` marker and replaces it with `[unverified number removed]`. Fail-closed means: if the scanner errors, we reject the response, never ship the number.
 
 What this prevents and what it doesn't is enumerated explicitly in [`docs/architecture.md` §5.5](docs/architecture.md). The honest gap: paraphrase verification (the model citing the right row but typing the wrong number string) is not in v0. It's in the eval section below.
 
-The UI renders `[cite:N]` markers as inline shadcn badges. Clicking a badge opens a popover with the rows and a link to the raw payload.
+The UI renders `[cite:N]` markers as inline shadcn badges. Clicking a badge opens a popover showing both the `normalized` shape and the `raw` source payload from the cited `record` row.
 
 ## Agent — what it does and why this one
 
@@ -161,12 +177,13 @@ Honest, ranked, with mitigations.
 
 **What v0 deliberately built to absorb the future:**
 
-- `merchant_id` in every primary key
+- `merchant_id` on every row
+- Single-table polymorphic schema — partition by `merchant_id` on one table, not seven
 - Connectors are stateless objects, trivially parallelisable
 - `SyncContext`/`RowSink` abstraction so inline writes become queue writes with no schema change
 - Append-only `run_log` ready to ship to a column store
 - PydanticAI provider abstraction — model swaps don't touch tool definitions
-- MCP server already a separate process from the API
+- Connector + tool layers are MCP-ready — wrapping them as an MCP server later does not touch chat or schema
 
 **Sketched but not built:** load-test harness (script outlined), Redis rate limiter (interface present, only the in-memory impl ships), Postgres baseline (Alembic in repo, no migrations yet).
 
@@ -226,7 +243,8 @@ This section will be filled in fully on submission with specific call-outs per a
 ## Acknowledgments
 
 - **`NousResearch/hermes-agent`** — we borrowed the architectural patterns (cron as first-class data flow, tool registry, observable execution, platform-agnostic core). We did not import the dependency; it's a generalist personal agent and we needed a narrow domain one.
-- **`bfrs/shiprocket-mcp`** — Shiprocket's parent company (Bigfoot Retail Solutions) ships an official MCP server. We acknowledge and use it for live-operation surfaces; we did not duplicate it.
+- **`bfrs/shiprocket-mcp`** — Shiprocket's parent company (Bigfoot Retail Solutions) ships an official MCP server. It shaped how we thought about Shiprocket integration; we did not duplicate or compete with it. Our v0 uses Shiprocket's REST API directly (rationale in `docs/architecture.md` §9).
+- **MongoDB and event-sourcing literature** — the single-table polymorphic model with typed application-side schemas is a recognisably document-store-shaped design, executed on SQL. Comparison in `docs/architecture.md` §4.7.
 - **Google A2UI** — the spec for agent-driven generative UI inspired our render-spec shape. We did not implement A2UI v0.9 in full; we adopted the concept.
 - **Vercel AI SDK** + the **FastAPI + AI SDK** template — official support for the Python-backend / TypeScript-frontend hybrid pattern we run.
 - **shadcn/ui, Tremor, Pydantic, PydanticAI, FastAPI, Next.js** — the components and frameworks doing the heavy lifting.

@@ -65,11 +65,11 @@ Each FR maps to a hard requirement in the brief.
 
 ### FR-2. Universal data model with provenance (Brief req #2)
 
-- FR-2.1. Define canonical entities: `merchant`, `order`, `order_item`, `customer`, `product`, `shipment`, `ad_campaign`, `ad_spend_daily`, `payment`.
-- FR-2.2. Every row carries provenance fields: `source_system`, `source_id`, `merchant_id`, `fetched_at`, `payload_hash`.
-- FR-2.3. The original payload from the source is preserved in a `raw_payload` table, keyed by `(source_system, source_id, fetched_at)`. Citations reference these immutable rows.
-- FR-2.4. Idempotency: re-running a sync does not duplicate rows. Updates are applied by `(source_system, source_id)`.
-- FR-2.5. The schema is source-agnostic. Adding a new payment provider does not require renaming `order.total_inr` to something else.
+- FR-2.1. **Single-table polymorphic storage.** All data records — orders, shipments, customers, products, ad spend, payments, and any future entity type — live in one `record` table, discriminated by an `entity_type` column. The typed shape of each entity is a Pydantic model in application code (`apps/api/src/munim/schemas/`), not a separate SQL table. The full schema is four relational tables: `merchant`, `connector_credentials`, `record`, `run_log`.
+- FR-2.2. Every `record` row carries provenance fields: `source_system`, `source_id`, `merchant_id`, `entity_type`, `fetched_at`, `payload_hash`.
+- FR-2.3. The original payload from the source is preserved on the same row as a `raw` JSON column, alongside the canonical `normalized` JSON shape. Citations resolve to `record.id`; the UI surfaces both `raw` and `normalized` when a citation is opened.
+- FR-2.4. Idempotency: re-running a sync does not duplicate rows. Upserts apply on `(merchant_id, source_system, source_id)`; `payload_hash` determines whether `normalized` needs to be re-derived.
+- FR-2.5. The schema is source-agnostic *and* entity-agnostic. Adding a new connector that produces a brand-new entity type (e.g., HubSpot CRM deals) requires zero DDL: define `class Deal(BaseModel)` in code, map source response → `record` row with `entity_type='deal'`. Existing chat tools and citation logic are unaffected.
 
 ### FR-3. Chat layer with citation contract (Brief req #3)
 
@@ -120,7 +120,7 @@ Each FR maps to a hard requirement in the brief.
 - NFR-4.1. OAuth tokens and API keys are stored in a dedicated `connector_credentials` table that is never returned by any tool, never logged, never sent to the LLM.
 - NFR-4.2. Secrets in development are sourced from `.env` files. `.env` is git-ignored. `.env.example` is committed with empty values.
 - NFR-4.3. Demo mode never requires real credentials.
-- NFR-4.4. Raw payloads stored in `raw_payload` may contain PII (customer phone, address). They are stored locally and never sent to the LLM. The LLM only sees normalised, scoped projections.
+- NFR-4.4. The `raw` JSON column on `record` rows may contain PII (customer phone, address). It is stored locally and never sent to the LLM. The LLM only sees scoped projections of the `normalized` JSON shape.
 
 ### NFR-5. Observability
 
@@ -158,7 +158,7 @@ The v0 is complete when a reviewer can:
 | Judgment | Section 2 (persona) and Section 4 (out of scope) make our choices defensible. |
 | Speed | Documentation-first reduces rework; commit history will reflect steady cadence. |
 | Connector abstraction | FR-1 spells out one interface, three implementations, swappable. |
-| Schema discipline | FR-2 lists provenance fields explicitly. NFR-4 isolates raw payloads. |
+| Schema discipline | FR-2 commits to a single-table polymorphic model with provenance on every row. NFR-4 isolates the `raw` payload from the LLM. |
 | Chat grounding | FR-3 defines the citation contract and the fail-closed enforcer. |
 | Agent design | FR-4 enumerates trigger, data, decision, action. Failure modes called out. |
 | Scale thinking | FR-5 plus NFR-3 commit to a concrete scaling story. |
