@@ -19,6 +19,24 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-13 — Phase 2: universal schema + Shopify connector (demo mode)
+
+**What changed:** Added the 4 SQLModel tables (`merchant`, `connector_credentials`, `record`, `run_log`) and the canonical `Order` Pydantic shape under `apps/api/src/munim/schemas/`. Added the connector abstraction in `apps/api/src/munim/connectors/base.py`: `Credential`, `SyncContext`, `SyncResult`, `BaseConnector` ABC, and `RowSink` — the only writer to the `record` table, which stamps provenance and upserts on `(merchant_id, source_system, source_id)`. Wired the first concrete connector, `ShopifyConnector`, with a demo iterator that reads a frozen `orders.json` fixture (3 orders covering COD / prepaid / partial). End-to-end integration tests prove the source-API → mapper → RowSink → `record` flow.
+
+**Verified:** all 35 tests pass. `init_db()` seeds the default merchant and creates every table. Tables confirmed: `['connector_credentials', 'merchant', 'record', 'run_log']`.
+
+**Files touched:**
+- `apps/api/src/munim/schemas/order.py` (+ `__init__.py`, tests).
+- `apps/api/src/munim/models/{merchant,connector_credentials,record,run_log}.py` (+ `__init__.py`, tests).
+- `apps/api/src/munim/connectors/{base.py,_row_sink.py}` (+ tests).
+- `apps/api/src/munim/connectors/shopify/{client,mapper,connector}.py` (+ fixtures, tests).
+- `apps/api/src/munim/shared/{constants.py,db.py}` (expanded enums; init_db imports models + seeds merchant).
+- `apps/api/conftest.py` (added `session` fixture).
+
+**Reverts cleanly?:** yes — the new `models/` and `connectors/` packages can be deleted entirely; `shared/constants.py` and `shared/db.py` revert to their Phase 1 form.
+
+---
+
 ## 2026-05-13 — Phase 1: monorepo + backend foundations + frontend scaffold + /health end-to-end
 
 **What changed:** Bootstrapped the full monorepo. Backend (`apps/api`) ships a FastAPI app with the shared foundations — Pydantic Settings config (fail-fast on missing required env), structlog-based JSON logger, trace_id middleware (ULID-based, propagated via structlog contextvars + `X-Trace-Id` header), domain error classes + global exception handlers covering `MunimError`, `RequestValidationError`, `StarletteHTTPException`, and unhandled `Exception` (each returning the standard error envelope), SQLite engine/session with lazy `lru_cache` for testability, and the universal `SuccessEnvelope[T]` / `ErrorEnvelope` shapes. One module (`health`) ships end-to-end as a tracer for the foundations, with 6 tests covering success envelope, header echo, inbound trace preservation, invalid-trace rejection, unhandled-exception → 500 envelope, and typed `MunimError` → custom envelope.
