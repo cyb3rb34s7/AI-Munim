@@ -15,6 +15,9 @@ class ErrorCode(StrEnum):
     VALIDATION_BAD_FORMAT = "validation.bad_format"
     CONNECTOR_NOT_CONFIGURED = "connector.not_configured"
     CONNECTOR_SYNC_FAILED = "connector.sync_failed"
+    CONNECTOR_UNKNOWN = "connector.unknown"
+    CONNECTOR_NOT_CONNECTED = "connector.not_connected"
+    RECORD_NOT_FOUND = "record.not_found"
 
 
 class EntityType(StrEnum):
