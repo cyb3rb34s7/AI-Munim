@@ -1,12 +1,9 @@
-from pathlib import Path
-
 import httpx
 
 from munim.connectors.base import Credential
 from munim.connectors.shopify.client import ShopifyClient
+from munim.connectors.shopify.tests._paths import SHOPIFY_DEMO_FIXTURE_PATH as FIXTURE_PATH
 from munim.shared.constants import ConnectorName
-
-FIXTURE_PATH = Path(__file__).parent / "fixtures" / "orders.json"
 
 
 def _demo_credential() -> Credential:

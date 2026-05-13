@@ -1,15 +1,13 @@
 import json
 from datetime import UTC, datetime
 from decimal import Decimal
-from pathlib import Path
 from typing import Any
 
 import pytest
 
 from munim.connectors.shopify.mapper import map_shopify_order_to_normalized
+from munim.connectors.shopify.tests._paths import SHOPIFY_DEMO_FIXTURE_PATH as FIXTURE_PATH
 from munim.shared.constants import PaymentMethod
-
-FIXTURE_PATH = Path(__file__).parent / "fixtures" / "orders.json"
 
 
 @pytest.fixture(scope="module")

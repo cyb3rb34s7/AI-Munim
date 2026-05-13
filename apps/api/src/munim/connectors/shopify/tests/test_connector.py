@@ -1,6 +1,5 @@
 import json
 from decimal import Decimal
-from pathlib import Path
 
 import httpx
 import pytest
@@ -9,6 +8,7 @@ from sqlmodel import Session, select
 from munim.connectors._row_sink import RowSink
 from munim.connectors.base import Credential, SyncContext
 from munim.connectors.shopify.connector import ShopifyConnector
+from munim.connectors.shopify.tests._paths import SHOPIFY_DEMO_FIXTURE_PATH as FIXTURE_PATH
 from munim.models import Record
 from munim.shared.constants import (
     ConnectorName,
@@ -17,7 +17,6 @@ from munim.shared.constants import (
     SourceSystem,
 )
 
-FIXTURE_PATH = Path(__file__).parent / "fixtures" / "orders.json"
 DEFAULT_MERCHANT_ID = "m_default"
 
 
