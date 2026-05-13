@@ -12,15 +12,20 @@ The contract per docs/architecture.md §3.1:
 `{"status": "demo", "fixture_path": "<absolute path to fixture JSON>"}`.
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import httpx
 from pydantic import BaseModel
 
 from munim.shared.constants import ConnectorName
+
+if TYPE_CHECKING:
+    from munim.connectors._row_sink import RowSink
 
 
 class Credential(BaseModel):
@@ -53,7 +58,7 @@ class SyncContext:
 
     merchant_id: str
     credential: Credential
-    row_sink: "RowSink"  # type: ignore[name-defined]  # noqa: F821  -- defined in _row_sink.py (Task 5)
+    row_sink: RowSink
     http_client: httpx.AsyncClient
     cursor: str | None = None
     extras: dict[str, Any] = field(default_factory=dict)
