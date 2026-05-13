@@ -33,9 +33,12 @@ def test_maps_placed_at_to_utc(fixture_orders: list[dict[str, Any]]) -> None:
     cod_order = next(o for o in fixture_orders if o["id"] == 5510000000001)
     order = map_shopify_order_to_normalized(cod_order)
 
-    # Shopify sends +05:30; we store UTC.
+    # Shopify sends +05:30; we must normalize to UTC. Python's datetime
+    # equality compares the absolute instant regardless of tzinfo, so the
+    # equality check alone passes for any timezone pointing at the same
+    # moment. The tzinfo identity assertion is what actually pins UTC.
+    assert order.placed_at.tzinfo is UTC
     assert order.placed_at == datetime(2026, 5, 10, 3, 45, 32, tzinfo=UTC)
-    assert order.placed_at.tzinfo is not None
 
 
 def test_maps_prepaid_order(fixture_orders: list[dict[str, Any]]) -> None:
@@ -128,3 +131,21 @@ def test_mapper_raises_on_missing_required_field() -> None:
 
     with pytest.raises(KeyError):
         map_shopify_order_to_normalized(malformed)
+
+
+def test_mapper_raises_when_created_at_lacks_timezone() -> None:
+    # Real bug class: a future connector (or corrupt Shopify response) could
+    # produce an ISO 8601 string without an offset. Silently producing a
+    # naive datetime would let it propagate into the DB, where the original
+    # timezone intent is irrecoverable. Lock the fail-loud contract.
+    naive_raw = {
+        "id": 5510000000400,
+        "created_at": "2026-05-12T12:00:00",  # no offset, no Z
+        "currency": "INR",
+        "current_total_price": "100.00",
+        "financial_status": "paid",
+        "payment_gateway_names": ["razorpay"],
+    }
+
+    with pytest.raises(ValueError, match="no timezone info"):
+        map_shopify_order_to_normalized(naive_raw)

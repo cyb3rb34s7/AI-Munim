@@ -20,7 +20,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from munim.shared.constants import ConnectorName
 
@@ -33,7 +33,12 @@ class Credential(BaseModel):
 
     The connector decides how to interpret `blob`. Demo mode uses:
         {"status": "demo", "fixture_path": "<absolute path>"}.
+
+    `extra="forbid"` catches typos in the outer keys (`merchant_id`,
+    `connector`, `blob`). Anything connector-specific belongs inside `blob`.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     merchant_id: str
     connector: ConnectorName
@@ -41,6 +46,24 @@ class Credential(BaseModel):
 
 
 class SyncResult(BaseModel):
+    """Outcome of one sync run. Returned by `sync_full` / `sync_incremental`.
+
+    Fields:
+      - `rows_upserted`: rows inserted or whose `payload_hash` changed.
+      - `rows_skipped`: rows whose `payload_hash` matched the stored row,
+        so no DB write was needed (idempotency proof).
+      - `started_at` / `finished_at`: UTC-aware datetimes bracketing the run.
+      - `errors`: list of per-row error messages. Phase 2 lets exceptions
+        propagate (no per-row swallow), so this stays empty. Phase 3 may
+        wire per-row error capture when an API endpoint needs partial-success
+        results — adding entries here will be intentional then, not silent.
+
+    `extra="forbid"` ensures a typo in any of the above field names raises
+    at construction rather than silently producing a zero-default count.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
     rows_upserted: int = 0
     rows_skipped: int = 0
     started_at: datetime

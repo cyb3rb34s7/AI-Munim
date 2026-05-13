@@ -3,19 +3,23 @@
 This is the only place that knows the shape of Shopify's response. The rest
 of the system reads from `Order`.
 
-A malformed order (missing required field, unparseable date, etc.) raises;
-the caller decides whether to fail the whole sync or skip the row. The
-ShopifyConnector currently lets exceptions propagate (no silent fallbacks).
+A malformed order (missing required field, unparseable date, missing tz info,
+etc.) raises; the caller decides whether to fail the whole sync or skip the
+row. The ShopifyConnector currently lets exceptions propagate (no silent
+fallbacks, per docs/conventions.md §10).
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
 from munim.schemas import Order
 from munim.shared.constants import PaymentMethod
 
+# Shopify Admin API constants. Kept as named module-level values rather than
+# inline literals per docs/conventions.md §7 (no magic strings in branches).
 _COD_GATEWAYS = {"cash_on_delivery", "cod"}
+_PARTIAL_FINANCIAL_STATUS = "partially_paid"
 
 
 def map_shopify_order_to_normalized(raw: dict[str, Any]) -> Order:
@@ -34,17 +38,26 @@ def map_shopify_order_to_normalized(raw: dict[str, Any]) -> Order:
 
 
 def _parse_iso(value: str) -> datetime:
-    # Shopify sends "+05:30" style offsets; fromisoformat handles them in 3.11+.
+    """Parse an ISO 8601 timestamp and normalize to UTC.
+
+    Raises `ValueError` if the input is timezone-naive — per
+    docs/conventions.md §8.2 (UTC on the wire, UTC in DB) and §10 (no silent
+    fallbacks). A naive datetime from upstream signals corruption, not a
+    known neutral state.
+    """
     dt = datetime.fromisoformat(value)
-    return dt.astimezone(tz=dt.tzinfo) if dt.tzinfo else dt
+    if dt.tzinfo is None:
+        raise ValueError(
+            f"_parse_iso: timestamp {value!r} has no timezone info; "
+            "expected an offset like '+05:30' or 'Z'."
+        )
+    return dt.astimezone(UTC)
 
 
 def _infer_payment_method(raw: dict[str, Any]) -> PaymentMethod:
-    financial_status = raw.get("financial_status", "")
-    gateways = [g.lower() for g in raw.get("payment_gateway_names", [])]
-
-    if financial_status == "partially_paid":
+    if raw.get("financial_status") == _PARTIAL_FINANCIAL_STATUS:
         return PaymentMethod.PARTIAL
+    gateways = [g.lower() for g in raw.get("payment_gateway_names", [])]
     if any(g in _COD_GATEWAYS for g in gateways):
         return PaymentMethod.COD
     return PaymentMethod.PREPAID
