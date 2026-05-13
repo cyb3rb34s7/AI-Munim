@@ -582,6 +582,29 @@ Alongside the implementation, in the same commit. Never "tests will follow in th
 
 `pytest -q` is green. `tsc --noEmit` is green. `ruff` and `eslint` are green. **No skipped tests without a `@pytest.mark.xfail(reason=...)` linking back to a `context.md` problem entry.**
 
+### 13.4 Meaningful tests only
+
+A test is meaningful when **its failure indicates a real bug**. Tests that pass forever unless someone deliberately breaks them, or whose failure mode is "I changed the assertion to match the new implementation," are noise — worse than no test, because they imply coverage that doesn't exist.
+
+Before writing a test, articulate one sentence: **"this fails when X breaks"** where X is a real, harmful condition. If you can't, don't write the test.
+
+**Write a test when:**
+- It encodes an invariant a future change might accidentally violate (idempotency, ordering, provenance preservation).
+- It tests a contract between components that typechecking can't catch (e.g., that a connector's mapped output is something the `RowSink` can store and round-trip).
+- It tests an edge case with a known bug class — off-by-one, leading-zero strings, integer IDs becoming strings, missing optional fields, timezone offsets, partially-paid states.
+- It tests a failure mode (raises the right typed error, returns the right code, fails closed).
+
+**Don't write a test when:**
+- It re-asserts a type the typechecker already enforces (e.g., `assert isinstance(x, Decimal)` on a field declared `Decimal`).
+- It just stores and reads back, with no constraint, no invariant, no transformation.
+- It mocks the function under test and asserts the mock was called.
+- It re-implements the function's logic inside the assertion.
+- Its failure could only be triggered by removing or rewriting the assertion itself.
+
+**Smell test:** if a test would still pass after you replace its assertions with `pass`, the assertions don't matter — delete the test.
+
+This is the user's hard-won lesson from prior projects: bloated test suites that give false confidence are worse than a smaller suite that catches real things. Apply the filter when writing the plan, and apply it again when the subagent (or anyone) writes the actual tests.
+
 ---
 
 ## 14. Quality gates

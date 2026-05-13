@@ -26,8 +26,8 @@ Every feature follows this loop. No exceptions.
 
 1. **Define** — agree on acceptance criteria for the slice (in chat with the user).
 2. **Plan** — I write the plan using `superpowers:writing-plans`. User reviews and iterates.
-3. **Implement** — I dispatch a coder subagent with: the plan + a reference to `docs/conventions.md`. The subagent writes code and tests. (Skill: `superpowers:subagent-driven-development`.)
-4. **Review** — I dispatch a second subagent for a critical code review against `docs/conventions.md`. (Skill: `superpowers:requesting-code-review`.)
+3. **Implement** — I dispatch **one** coder subagent **per phase** (not per task) with the full plan + a reference to `docs/conventions.md`. The subagent works through the plan top to bottom, committing per task as the plan dictates. Per-task dispatch is rejected — the dispatch overhead exceeds the value at our task granularity. (Skill: `superpowers:subagent-driven-development`.)
+4. **Review** — I dispatch a reviewer subagent for a critical review of the whole phase against `docs/conventions.md`. Reviewer reads the diff + the plan + the conventions and reports issues by severity. (Skill: `superpowers:requesting-code-review`.)
 5. **Fix** — apply review findings.
 6. **Verify** — I update `context.md` (decisions, problems, solutions) and `CHANGELOG.md` (what, why, date) **in the same commit as the code**. (Skill: `superpowers:verification-before-completion`.)
 7. **Manual test** — hand off to the user.
