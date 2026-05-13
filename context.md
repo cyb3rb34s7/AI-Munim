@@ -8,13 +8,13 @@
 
 ## Now
 
-Phase 2 complete + reviewer findings applied. Universal schema + RowSink + ShopifyConnector demo sync working end-to-end. All checks green:
-- Backend: `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, `uv run pytest` — all pass (36/36 tests after the review-cycle fix added one).
-- Tables: `['connector_credentials', 'merchant', 'record', 'run_log']` created by `init_db()`, default merchant seeded.
-- Demo sync: `ShopifyConnector.sync_full()` reads frozen `orders.json`, maps 3 orders (COD/prepaid/partial) to `Order` Pydantic, writes to `record` table with full provenance. Second run is idempotent (0 upserts, 3 skipped).
-- Time handling tightened: timestamps now normalize to UTC and fail-loud on missing timezone info (post-review fix; two new paid lessons below).
+Phase 3 complete. Clickable demo: Connect → Sync → Records → row → raw + normalized side by side. 57 backend tests green.
+- Backend: `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, `uv run pytest` — all pass (57/57 tests).
+- New endpoints: `GET /connectors`, `POST /connectors/{name}/connect`, `POST /connectors/{name}/sync`, `GET /records`, `GET /records/{id}`.
+- `ConnectorRegistry` maps `ConnectorName` → `BaseConnector` instance; adding Phase 4 connectors is one registry entry each.
+- Frontend: `react-router-dom` router, `AppShell` nav, `ConnectorsPage` (Connect/Sync per card), `RecordsPage` (table + raw/normalized drawer). Build: typecheck + lint + production build all green.
 
-**Next:** Phase 3 — API endpoints to trigger the sync + connector management UI + real OAuth scaffold.
+**Next:** Phase 4 — Connectors 2 and 3 (Meta Ads + Shiprocket): same pattern, register in `default_registry`, add demo fixtures.
 
 ---
 
@@ -25,13 +25,14 @@ Phase 2 complete + reviewer findings applied. Universal schema + RowSink + Shopi
 - 2026-05-13 — Governance setup: `docs/conventions.md`, `CLAUDE.md`, `CHANGELOG.md`, `context.md` (this file).
 - 2026-05-13 — **Phase 1 complete.** Monorepo skeleton, backend foundations (config, logging, trace, errors, responses, db, constants), `/health` module with 6 tests, frontend scaffold (Vite + React 19 + Tailwind v4 + theme), shared API client (ky + Zod envelope unwrap), Zustand theme store, TanStack Query client, dumb `HealthCard` + connector `HealthSection`. Dev infra: pre-commit, GitHub Actions CI, `docker-compose.yml`. End-to-end live-verified. See `CHANGELOG.md` 2026-05-13 entry for details.
 - 2026-05-13 — **Phase 2 complete.** Universal 4-table schema (`merchant`, `connector_credentials`, `record`, `run_log`), `Order` Pydantic (canonical normalized shape), `BaseConnector` ABC + `RowSink` writer, `ShopifyConnector` demo sync end-to-end. Reviewer subagent surfaced 1 critical + 4 important findings (all time-handling + extra=forbid + magic string); all applied. 36 tests, all green. See `CHANGELOG.md` 2026-05-13 Phase 2 entry for details.
+- 2026-05-14 — **Phase 3 complete.** Connectors + Records API, AppShell + nav, two new frontend modules. End-to-end demo working at `/connectors` and `/records`.
 
 ---
 
 ## Next
 
-1. **Phase 3 — API endpoints + demo UI + real OAuth scaffold.** Wire `/api/connectors/` endpoints to trigger `ShopifyConnector.sync_full`, build connector management UI, add real OAuth flow stub, add `RunLog` writes from the sync endpoint.
-2. **Phase 4 — Connectors 2 and 3.** Meta Ads + Shiprocket, same pattern, fewer surprises.
+1. **Phase 4 — Connectors 2 and 3 (Meta Ads + Shiprocket).** Same pattern, register in `default_registry`, add demo fixtures.
+2. **Phase 4 — Chat tools over the schema.** `query_orders`, `query_shipments`, `query_ad_spend`, `compute_metric`, `propose_action`. Tool return shape with `RowCitation`s.
 3. **Phase 4 — Chat tools over the schema.** `query_orders`, `query_shipments`, `query_ad_spend`, `compute_metric`, `propose_action`. Tool return shape with `RowCitation`s.
 4. **Phase 5 — Citation contract.** PydanticAI integration, system prompt, structured `GroundedAnswer` output, fail-closed post-processor for uncited numbers.
 5. **Phase 6 — RTO Risk Mitigator agent.** APScheduler cron + signal extraction + scoring + `run_log` writes. No side effects.
@@ -102,6 +103,19 @@ Every entry is a paid lesson. Read at the start of every session. Never repeat o
 ## Decisions
 
 Non-obvious choices made during the build. Different from `CHANGELOG.md` (mechanical: what changed). This is judgmental: why we picked X over Y.
+
+### 2026-05-14 — Demo fixture lives at apps/api/data/fixtures/, not in tests/
+
+**Decision:** Moved the Shopify orders fixture from `tests/fixtures/` to
+`apps/api/data/fixtures/shopify/orders.json`. Tests now point at the same
+file via a small `_paths.py` helper.
+
+**Why:** The running app's connect endpoint needs a stable path that isn't
+inside a tests directory. One file used by both demo and tests beats two
+copies that can drift apart.
+
+**Revisit if:** the fixture grows to MB scale and slows test discovery, or
+if we want test-specific edge cases that shouldn't pollute the demo.
 
 ### 2026-05-13 — Vite + React 19 instead of Next.js 15 for the frontend
 

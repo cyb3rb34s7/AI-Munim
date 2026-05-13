@@ -19,6 +19,16 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-14 — Phase 3: connectors API + records API + clickable demo UI
+
+**What changed:** Added two new vertical-slice backend modules — `connectors` (list/connect/sync endpoints) and `records` (list/detail) — plus `ConnectorRegistry` so adding Meta Ads / Shiprocket in Phase 4 is one registry entry. Moved the Shopify demo fixture from `tests/fixtures/` to `apps/api/data/fixtures/shopify/` (production demo path). Frontend gained `react-router-dom`, an `AppShell` with nav, and two new vertical-slice modules — `connectors` (Connect / Sync UI per card) and `records` (table + drawer showing raw + normalized side by side). The demo is now clickable: Connect → Sync → Records → row → see provenance.
+
+**Files touched:** `apps/api/src/munim/connectors/registry.py`, `apps/api/src/munim/modules/connectors/*`, `apps/api/src/munim/modules/records/*`, `apps/api/data/fixtures/shopify/orders.json`, `apps/web/src/router.tsx`, `apps/web/src/pages/*`, `apps/web/src/modules/connectors/*`, `apps/web/src/modules/records/*`, `apps/web/src/shared/components/*`.
+
+**Reverts cleanly?:** yes — the new modules can be deleted; revert the fixture move + `main.py` router registration + `main.tsx` to drop the phase.
+
+---
+
 ## 2026-05-13 — Phase 2: universal schema + Shopify connector (demo mode)
 
 **What changed:** Added the 4 SQLModel tables (`merchant`, `connector_credentials`, `record`, `run_log`) and the canonical `Order` Pydantic shape under `apps/api/src/munim/schemas/`. Added the connector abstraction in `apps/api/src/munim/connectors/base.py`: `Credential`, `SyncContext`, `SyncResult`, `BaseConnector` ABC, and `RowSink` — the only writer to the `record` table, which stamps provenance and upserts on `(merchant_id, source_system, source_id)`. Wired the first concrete connector, `ShopifyConnector`, with a demo iterator that reads a frozen `orders.json` fixture (3 orders covering COD / prepaid / partial). End-to-end integration tests prove the source-API → mapper → RowSink → `record` flow.
