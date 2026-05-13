@@ -3,10 +3,6 @@
 Per docs/conventions.md §7: NO magic strings in critical comparisons. Status
 checks, error codes, payment methods, entity types all live in StrEnums and
 get mirrored to the frontend as `as const` unions.
-
-This file is sparse in Phase 1 and grows as features land. The shape is:
-  - ErrorCode lives here from day one (used by the error envelope).
-  - Domain enums (EntityType, PaymentMethod, ShipmentStatus, ...) join in Phase 2.
 """
 
 from enum import StrEnum
@@ -17,3 +13,44 @@ class ErrorCode(StrEnum):
     SYSTEM_DATABASE_UNAVAILABLE = "system.database_unavailable"
     VALIDATION_MISSING_FIELD = "validation.missing_field"
     VALIDATION_BAD_FORMAT = "validation.bad_format"
+    CONNECTOR_NOT_CONFIGURED = "connector.not_configured"
+    CONNECTOR_SYNC_FAILED = "connector.sync_failed"
+
+
+class EntityType(StrEnum):
+    ORDER = "order"
+    SHIPMENT = "shipment"
+    AD_SPEND = "ad_spend"
+    CUSTOMER = "customer"
+    PRODUCT = "product"
+    PAYMENT = "payment"
+
+
+class SourceSystem(StrEnum):
+    SHOPIFY = "shopify"
+    META_ADS = "meta_ads"
+    SHIPROCKET = "shiprocket"
+
+
+class ConnectorName(StrEnum):
+    SHOPIFY = "shopify"
+    META_ADS = "meta_ads"
+    SHIPROCKET = "shiprocket"
+
+
+class PaymentMethod(StrEnum):
+    COD = "cod"
+    PREPAID = "prepaid"
+    PARTIAL = "partial"
+
+
+class CredentialStatus(StrEnum):
+    CONNECTED = "connected"
+    DEMO = "demo"
+    ERROR = "error"
+
+
+class RunLogKind(StrEnum):
+    SYNC = "sync"
+    CHAT = "chat"
+    AGENT = "agent"
