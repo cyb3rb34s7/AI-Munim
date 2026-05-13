@@ -1,9 +1,13 @@
+from typing import ClassVar
+
 import pytest
 from sqlmodel import Session
 
-from munim.connectors.registry import default_registry
+from munim.connectors.base import BaseConnector, Credential, SyncContext, SyncResult
+from munim.connectors.registry import ConnectorRegistry, default_registry
 from munim.modules.connectors.service import (
     ConnectorNotConnectedError,
+    ConnectorSyncError,
     connect_demo,
     list_connectors,
     sync_connector,
@@ -105,3 +109,42 @@ async def test_sync_raises_when_credential_missing(session: Session) -> None:
             session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY, default_registry()
         )
     assert exc_info.value.code == "connector.not_connected"
+
+
+class _RaisingConnector(BaseConnector):
+    """Stub connector whose sync_full always raises an untyped exception."""
+
+    name: ClassVar[ConnectorName] = ConnectorName.SHOPIFY
+
+    def authorize_url(self, merchant_id: str) -> str:
+        raise NotImplementedError
+
+    async def exchange_code(self, merchant_id: str, code: str) -> Credential:
+        raise NotImplementedError
+
+    async def validate(self, credential: Credential) -> bool:
+        return True
+
+    async def sync_full(self, ctx: SyncContext) -> SyncResult:
+        raise RuntimeError("connector blew up mid-sync")
+
+
+async def test_sync_wraps_untyped_exception_as_connector_sync_failed(
+    session: Session,
+) -> None:
+    # If a connector raises something untyped (network glitch, mapper bug,
+    # KeyError on an unexpected payload), the frontend must see
+    # 'connector.sync_failed' — NOT 'system.unexpected'. Without the typed
+    # wrap in service.sync_connector, this test fails by raising the bare
+    # RuntimeError up to the caller and breaking the error-code contract.
+    connect_demo(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY)
+    session.commit()
+
+    raising_registry = ConnectorRegistry({ConnectorName.SHOPIFY: _RaisingConnector()})
+
+    with pytest.raises(ConnectorSyncError) as exc_info:
+        await sync_connector(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY, raising_registry)
+    assert exc_info.value.code == "connector.sync_failed"
+    # `from exc` chaining must be preserved so logs/observability can see
+    # the original failure cause.
+    assert isinstance(exc_info.value.__cause__, RuntimeError)

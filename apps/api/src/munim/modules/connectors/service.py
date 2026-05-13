@@ -123,7 +123,21 @@ async def sync_connector(
             row_sink=row_sink,
             http_client=http_client,
         )
-        result = await connector.sync_full(ctx)
+        # At this boundary, anything the connector fails on IS a sync failure.
+        # Typed MunimError subclasses propagate as-is so the frontend gets the
+        # specific code (e.g., connector.rate_limited later); anything else is
+        # rewrapped as connector.sync_failed instead of leaking as
+        # system.unexpected. NOT a silent fallback per §10: we re-raise loudly
+        # with the original exception chained.
+        try:
+            result = await connector.sync_full(ctx)
+        except MunimError:
+            raise
+        except Exception as exc:
+            raise ConnectorSyncError(
+                message=f"Sync failed for connector {name.value!r}: {exc}",
+                details={"connector": name.value, "exc_type": type(exc).__name__},
+            ) from exc
 
     credential_row.last_sync_at = datetime.now(UTC)
     session.add(credential_row)
