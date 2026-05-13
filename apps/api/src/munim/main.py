@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from munim.modules.connectors.router import router as connectors_router
 from munim.modules.health.router import router as health_router
+from munim.modules.records.router import router as records_router
 from munim.shared.config import get_settings
 from munim.shared.db import init_db
 from munim.shared.errors import install_error_handlers
@@ -37,6 +38,7 @@ def create_app() -> FastAPI:
     install_error_handlers(app)
     app.include_router(health_router)
     app.include_router(connectors_router)
+    app.include_router(records_router)
     return app
 
 
