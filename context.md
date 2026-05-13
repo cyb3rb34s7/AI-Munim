@@ -8,11 +8,12 @@
 
 ## Now
 
-Phase 3 complete. Clickable demo: Connect → Sync → Records → row → raw + normalized side by side. 57 backend tests green.
-- Backend: `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, `uv run pytest` — all pass (57/57 tests).
+Phase 3 complete + reviewer findings applied + live browser smoke passed. Clickable demo working end-to-end. 58 backend tests green.
+- Backend: ruff + format + mypy + pytest — all pass (58/58 after the review fix added the ConnectorSyncError wrap test).
 - New endpoints: `GET /connectors`, `POST /connectors/{name}/connect`, `POST /connectors/{name}/sync`, `GET /records`, `GET /records/{id}`.
 - `ConnectorRegistry` maps `ConnectorName` → `BaseConnector` instance; adding Phase 4 connectors is one registry entry each.
 - Frontend: `react-router-dom` router, `AppShell` nav, `ConnectorsPage` (Connect/Sync per card), `RecordsPage` (table + raw/normalized drawer). Build: typecheck + lint + production build all green.
+- **Live smoke (2026-05-14, agent-browser):** Overview health card → Connectors page (Shopify "not connected") → click Connect (demo) → status flips to "demo" + Sync button → click Sync → "3 upserted, 0 unchanged" → click Sync again → "0 upserted, 3 unchanged" (idempotency visible) → Records page → 3 rows → click row → drawer shows `placed_at: "...Z"` (UTC) next to raw `created_at: "...+05:30"`. All 8 smoke steps pass.
 
 **Next:** Phase 4 — Connectors 2 and 3 (Meta Ads + Shiprocket): same pattern, register in `default_registry`, add demo fixtures.
 
@@ -25,20 +26,18 @@ Phase 3 complete. Clickable demo: Connect → Sync → Records → row → raw +
 - 2026-05-13 — Governance setup: `docs/conventions.md`, `CLAUDE.md`, `CHANGELOG.md`, `context.md` (this file).
 - 2026-05-13 — **Phase 1 complete.** Monorepo skeleton, backend foundations (config, logging, trace, errors, responses, db, constants), `/health` module with 6 tests, frontend scaffold (Vite + React 19 + Tailwind v4 + theme), shared API client (ky + Zod envelope unwrap), Zustand theme store, TanStack Query client, dumb `HealthCard` + connector `HealthSection`. Dev infra: pre-commit, GitHub Actions CI, `docker-compose.yml`. End-to-end live-verified. See `CHANGELOG.md` 2026-05-13 entry for details.
 - 2026-05-13 — **Phase 2 complete.** Universal 4-table schema (`merchant`, `connector_credentials`, `record`, `run_log`), `Order` Pydantic (canonical normalized shape), `BaseConnector` ABC + `RowSink` writer, `ShopifyConnector` demo sync end-to-end. Reviewer subagent surfaced 1 critical + 4 important findings (all time-handling + extra=forbid + magic string); all applied. 36 tests, all green. See `CHANGELOG.md` 2026-05-13 Phase 2 entry for details.
-- 2026-05-14 — **Phase 3 complete.** Connectors + Records API, AppShell + nav, two new frontend modules. End-to-end demo working at `/connectors` and `/records`.
+- 2026-05-14 — **Phase 3 complete.** Connectors + Records API, AppShell + nav, two new frontend modules. End-to-end demo working at `/connectors` and `/records`. Reviewer subagent surfaced 2 Important findings (ConnectorSyncError dead code + duplicated records query key); all applied + tests added. Live browser smoke (agent-browser) walked all 8 steps of the recipe — pass.
 
 ---
 
 ## Next
 
 1. **Phase 4 — Connectors 2 and 3 (Meta Ads + Shiprocket).** Same pattern, register in `default_registry`, add demo fixtures.
-2. **Phase 4 — Chat tools over the schema.** `query_orders`, `query_shipments`, `query_ad_spend`, `compute_metric`, `propose_action`. Tool return shape with `RowCitation`s.
-3. **Phase 4 — Chat tools over the schema.** `query_orders`, `query_shipments`, `query_ad_spend`, `compute_metric`, `propose_action`. Tool return shape with `RowCitation`s.
-4. **Phase 5 — Citation contract.** PydanticAI integration, system prompt, structured `GroundedAnswer` output, fail-closed post-processor for uncited numbers.
-5. **Phase 6 — RTO Risk Mitigator agent.** APScheduler cron + signal extraction + scoring + `run_log` writes. No side effects.
-6. **Phase 7 — Frontend modules.** Connectors page, chat page (streaming), agent runs page.
-7. **Phase 8 — Demo seed data + `docker-compose up` story.**
-8. **Phase 9 — README rewrite** (the deliverable's headline artifact).
+2. **Phase 5 — Chat tools over the schema.** `query_orders`, `query_shipments`, `query_ad_spend`, `compute_metric`, `propose_action`. Tool return shape with `RowCitation`s.
+3. **Phase 6 — Citation contract.** PydanticAI integration, system prompt, structured `GroundedAnswer` output, fail-closed post-processor for uncited numbers.
+4. **Phase 7 — RTO Risk Mitigator agent.** APScheduler cron + signal extraction + scoring + `run_log` writes. No side effects.
+5. **Phase 8 — Frontend chat + agent pages.** Streaming `useChat`, agent runs table.
+6. **Phase 9 — Demo seed data + `docker-compose up` story + README rewrite** (the deliverable's headline artifact).
 
 Ranking re-evaluated at the start of each new phase.
 
@@ -47,6 +46,16 @@ Ranking re-evaluated at the start of each new phase.
 ## Problems & solutions
 
 Every entry is a paid lesson. Read at the start of every session. Never repeat one.
+
+### 2026-05-14 (Phase 3 review) — a typed error class that's never raised IS a contract bug
+
+**Problem:** Phase 3 declared `ConnectorSyncError` with `code = "connector.sync_failed"` but never raised it. The sync endpoint instead let untyped exceptions (RuntimeError, KeyError) bubble to the global handler, which classified them as `system.unexpected`. Frontend branches on `code`, so a sync failure looked indistinguishable from any other internal error.
+
+**Root cause:** YAGNI was misapplied. The class was added defensively without a callsite. Per the convention "every error code in the enum is either used or scheduled," an unused error code that *should* be used is worse than not having it — it implies a contract that doesn't exist.
+
+**Solution:** Wrapped the `connector.sync_full(ctx)` call in `sync_connector` to catch non-`MunimError` exceptions and re-raise as `ConnectorSyncError` with `from exc` chaining (preserves the original traceback for observability). MunimError subclasses propagate unchanged so typed sub-errors like `connector.rate_limited` will surface correctly when Phase 4 introduces them. Added `test_sync_wraps_untyped_exception_as_connector_sync_failed` with a stub connector that always raises — the test fails without the wrap, passes with it.
+
+**Guardrail:** Every typed error class in `shared/errors.py` or a module's `service.py` must have at least one `raise` site **and** at least one test that exercises the path. If it doesn't, delete the class. Dead error codes mislead the frontend's `code`-based branching as much as missing ones do.
 
 ### 2026-05-13 — `ruff` N818 requires exception class names to end in `Error`
 
