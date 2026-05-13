@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from munim.modules.connectors.router import router as connectors_router
 from munim.modules.health.router import router as health_router
 from munim.shared.config import get_settings
 from munim.shared.db import init_db
@@ -35,6 +36,7 @@ def create_app() -> FastAPI:
     app.add_middleware(TraceIdMiddleware)
     install_error_handlers(app)
     app.include_router(health_router)
+    app.include_router(connectors_router)
     return app
 
 
