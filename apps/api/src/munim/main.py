@@ -1,9 +1,9 @@
 """FastAPI app composition. Wires middleware, error handlers, and module routers."""
 
-import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from munim.modules.chat.router import router as chat_router
@@ -19,14 +19,10 @@ from munim.shared.trace import TraceIdMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    load_dotenv(override=False)
     configure_logging()
     log = get_logger("munim.startup")
     settings = get_settings()
-    # Propagate OPENAI_API_KEY into os.environ so third-party SDKs that read
-    # it directly (PydanticAI's OpenAI provider, openai.AsyncOpenAI) pick it
-    # up. Pydantic Settings loads .env into the Settings instance but does
-    # NOT mirror to os.environ; this bridge is the smallest fix.
-    os.environ["OPENAI_API_KEY"] = settings.openai_api_key
     log.info("app.startup.beginning", env=settings.app_env)
     init_db()
     log.info("app.startup.completed", env=settings.app_env)

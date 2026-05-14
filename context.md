@@ -51,15 +51,17 @@ Ranking re-evaluated at the start of each new phase.
 
 Every entry is a paid lesson. Read at the start of every session. Never repeat one.
 
-### 2026-05-14 (Phase 5 live smoke) — pydantic-settings does not propagate values to os.environ; downstream SDKs that read os.environ directly fail
+### 2026-05-14 (Phase 5 live smoke) — pydantic-settings does not propagate values to os.environ; use python-dotenv as the canonical bridge
 
-**Problem:** `OPENAI_API_KEY` was in `apps/api/.env` and Pydantic Settings loaded it into `settings.openai_api_key` correctly. But the first chat request returned `system.unexpected` with the trace showing `openai.OpenAIError: Missing credentials. Please pass an api_key, ... or set the OPENAI_API_KEY environment variable.`
+**Problem:** `OPENAI_API_KEY` was in `apps/api/.env` and Pydantic Settings loaded it into `settings.openai_api_key` correctly. But the first chat request returned `system.unexpected` because `openai.AsyncOpenAI()` reads `os.environ["OPENAI_API_KEY"]` directly, and pydantic-settings doesn't mirror .env values into `os.environ`.
 
-**Root cause:** Pydantic Settings reads `.env` into the Settings instance but does NOT mirror the values into `os.environ`. PydanticAI's OpenAI provider constructs `AsyncOpenAI()` with no explicit `api_key` arg, and `AsyncOpenAI` reads `os.environ["OPENAI_API_KEY"]` directly. Since uvicorn was launched without `OPENAI_API_KEY` exported in the shell, the SDK never saw the value.
+**Root cause:** pydantic-settings reads `.env` via its own parser into the Settings instance; it doesn't touch `os.environ`. Third-party SDKs (OpenAI, Anthropic, anything that reads env vars) therefore never see .env values unless something else loads them.
 
-**Solution:** In `main.py`'s `lifespan`, after loading settings, set `os.environ["OPENAI_API_KEY"] = settings.openai_api_key`. Two lines. Bridges the Pydantic Settings ↔ third-party SDK gap. Documented inline.
+**Solution:** Use `python-dotenv` as the canonical bridge. `load_dotenv(override=False)` in `main.py`'s `lifespan` populates `os.environ` from `.env`. Pydantic Settings still reads from `os.environ` (which now has the values), and third-party SDKs see them too. One library, one source of truth, no per-SDK hacks. `override=False` ensures pytest's `monkeypatch.setenv` still wins.
 
-**Guardrail:** Any external SDK that reads env vars directly (OpenAI, Anthropic, AWS, etc.) needs an os.environ bridge from Settings at startup. The cleaner alternative is constructing the SDK explicitly with `api_key=settings.api_key`, which we'll do once we have a provider abstraction layer. For now the env bridge is the smaller fix.
+Initial fix was a manual `os.environ["OPENAI_API_KEY"] = settings.openai_api_key` bridge — user flagged that python-dotenv is the cleaner pattern; refactored.
+
+**Guardrail:** Any project using pydantic-settings with third-party SDKs that read env directly should add `python-dotenv` and call `load_dotenv(override=False)` at startup. Don't do per-SDK env mirroring — it doesn't scale across providers.
 
 ### 2026-05-14 (Phase 5) — pydantic-ai 1.96.0 TestModel calls ALL tools by default, breaking agent tests
 
