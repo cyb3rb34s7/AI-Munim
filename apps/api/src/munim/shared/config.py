@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     # URL-safe base64; must decode to 32 bytes for AES-256-GCM.
     credentials_encryption_key: str
 
+    # Phase 5 — OpenAI. API key required; model/temperature have defaults.
+    openai_api_key: str
+    openai_chat_model: str = "gpt-4o-mini"
+    openai_chat_temperature: float = 0.0
+
     # Frontend URL used by the OAuth callback redirect.
     frontend_base_url: str = "http://localhost:5173"
 

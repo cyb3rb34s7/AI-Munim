@@ -23,6 +23,9 @@ class ErrorCode(StrEnum):
     AUTH_HMAC_MISMATCH = "auth.hmac_mismatch"
     AUTH_OAUTH_EXCHANGE_FAILED = "auth.oauth_exchange_failed"
     AUTH_CREDENTIAL_UNREADABLE = "auth.credential_unreadable"
+    CHAT_LLM_UNAVAILABLE = "chat.llm_unavailable"
+    CHAT_TOOL_FAILED = "chat.tool_failed"
+    CHAT_UNVERIFIED_ANSWER = "chat.unverified_answer"
 
 
 class EntityType(StrEnum):
