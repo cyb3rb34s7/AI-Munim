@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
+from munim.modules.agent_runs.router import router as agent_runs_router
 from munim.modules.chat.router import router as chat_router
 from munim.modules.connectors.router import router as connectors_router
 from munim.modules.health.router import router as health_router
@@ -43,6 +44,7 @@ def create_app() -> FastAPI:
     app.include_router(connectors_router)
     app.include_router(records_router)
     app.include_router(chat_router)
+    app.include_router(agent_runs_router)
     return app
 
 
