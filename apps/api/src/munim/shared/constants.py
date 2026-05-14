@@ -26,6 +26,8 @@ class ErrorCode(StrEnum):
     CHAT_LLM_UNAVAILABLE = "chat.llm_unavailable"
     CHAT_TOOL_FAILED = "chat.tool_failed"
     CHAT_UNVERIFIED_ANSWER = "chat.unverified_answer"
+    AGENT_UNKNOWN = "agent.unknown"
+    AGENT_RUN_FAILED = "agent.run_failed"
 
 
 class EntityType(StrEnum):
@@ -75,3 +77,13 @@ class MetricFormula(StrEnum):
 
     SUM_TOTAL_INR = "sum_total_inr"
     COUNT_ORDERS = "count_orders"
+
+
+class AgentName(StrEnum):
+    RTO_MITIGATOR = "rto_mitigator"
+
+
+class AgentActionType(StrEnum):
+    CONVERT_TO_PREPAID = "convert_to_prepaid"
+    CONFIRMATION_CALL = "confirmation_call"
+    NO_ACTION = "no_action"
