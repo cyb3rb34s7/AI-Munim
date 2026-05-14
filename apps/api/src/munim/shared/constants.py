@@ -28,6 +28,7 @@ class ErrorCode(StrEnum):
     CHAT_UNVERIFIED_ANSWER = "chat.unverified_answer"
     AGENT_UNKNOWN = "agent.unknown"
     AGENT_RUN_FAILED = "agent.run_failed"
+    AGENT_RUN_NOT_FOUND = "agent.run_not_found"
 
 
 class EntityType(StrEnum):
@@ -77,6 +78,14 @@ class MetricFormula(StrEnum):
 
     SUM_TOTAL_INR = "sum_total_inr"
     COUNT_ORDERS = "count_orders"
+
+
+class FulfillmentStatus(StrEnum):
+    PENDING = "pending"
+    FULFILLED = "fulfilled"
+    PARTIAL = "partial"
+    RTO = "rto"
+    CANCELLED = "cancelled"
 
 
 class AgentName(StrEnum):

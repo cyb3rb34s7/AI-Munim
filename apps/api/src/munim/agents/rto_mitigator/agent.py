@@ -45,6 +45,13 @@ class RTOMitigatorAgent:
         started_at = datetime.now(UTC)
         run_id = f"ar_{ULID()}"
 
+        log.info(
+            "agent.run.started",
+            agent=self.name.value,
+            run_id=run_id,
+            merchant_id=merchant_id,
+        )
+
         orders = self._scan_cod_orders(session, merchant_id)
         decisions = [self._score_order(session, merchant_id, o) for o in orders]
         actions_proposed = sum(
@@ -79,7 +86,10 @@ class RTOMitigatorAgent:
             duration_ms=int((finished_at - started_at).total_seconds() * 1000),
         )
 
-        assert run.id is not None
+        if run.id is None:
+            raise RuntimeError(
+                "RunLog.id is None after session.flush() — database autoincrement failed."
+            )
         return AgentRunSummary(
             run_id=run_id,
             run_log_id=run.id,
@@ -105,16 +115,21 @@ class RTOMitigatorAgent:
     def _score_order(self, session: Session, merchant_id: str, order: Record) -> dict[str, Any]:
         n = order.normalized
         total_inr = Decimal(n["total_inr"])
+        raw_customer_id = n.get("customer_source_id")
+        customer_id = raw_customer_id if raw_customer_id else None
 
         signals: dict[str, SignalResult] = {
             "value": order_value_bucket(total_inr),
             "pincode": pincode_risk(n.get("pincode")),
             "time": time_of_order_risk(n["placed_at"]),
-            "customer": customer_rto_rate(session, merchant_id, n.get("customer_source_id", "")),
+            "customer": customer_rto_rate(session, merchant_id, customer_id),
         }
         decision: RTODecision = score_signals(signals, total_inr=total_inr)
 
-        assert order.id is not None
+        if order.id is None:
+            raise RuntimeError(
+                "Record.id is None for an order scanned from the database — invariant violated."
+            )
         return {
             "record_id": order.id,
             "source_id": order.source_id,

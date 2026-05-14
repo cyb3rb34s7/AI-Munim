@@ -18,8 +18,14 @@ class AgentUnknownError(MunimError):
     message = "Unknown agent."
 
 
+class AgentRunFailedError(MunimError):
+    code = ErrorCode.AGENT_RUN_FAILED.value
+    http_status = 500
+    message = "Agent run failed."
+
+
 class AgentRunNotFoundError(MunimError):
-    code = ErrorCode.RECORD_NOT_FOUND.value
+    code = ErrorCode.AGENT_RUN_NOT_FOUND.value
     http_status = 404
     message = "Agent run not found."
 
@@ -39,7 +45,15 @@ def trigger_agent(
             details={"agent": agent_name.value},
         )
     agent = agent_cls()
-    summary = agent.run(session, merchant_id)
+    try:
+        summary = agent.run(session, merchant_id)
+    except MunimError:
+        raise
+    except (KeyError, ValueError) as exc:
+        raise AgentRunFailedError(
+            message=f"Agent {agent_name.value!r} run failed on a malformed record.",
+            details={"agent": agent_name.value, "reason": str(exc)},
+        ) from exc
     return TriggerAgentResponse(
         run=AgentRunSummary(
             run_log_id=summary.run_log_id,

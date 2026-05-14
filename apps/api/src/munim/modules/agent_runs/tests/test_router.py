@@ -4,7 +4,12 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from munim.models import Record
-from munim.shared.constants import EntityType, PaymentMethod, SourceSystem
+from munim.shared.constants import (
+    EntityType,
+    FulfillmentStatus,
+    PaymentMethod,
+    SourceSystem,
+)
 
 
 def _seed_cod_order(session: Any, source_id: str) -> None:
@@ -93,7 +98,7 @@ def test_get_agent_run_returns_decisions(client: TestClient) -> None:
                     "currency": "INR",
                     "payment_method": PaymentMethod.COD.value,
                     "financial_status": "pending",
-                    "fulfillment_status": "rto",
+                    "fulfillment_status": FulfillmentStatus.RTO.value,
                     "pincode": "110001",
                     "customer_source_id": "cust_x",
                 },
@@ -117,4 +122,4 @@ def test_get_unknown_agent_run_returns_typed_404(client: TestClient) -> None:
     response = client.get("/agent-runs/999999")
     assert response.status_code == 404
     body = response.json()
-    assert body["error"]["code"] == "record.not_found"
+    assert body["error"]["code"] == "agent.run_not_found"

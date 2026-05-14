@@ -10,6 +10,7 @@ from munim.shared.constants import (
     AgentActionType,
     AgentName,
     EntityType,
+    FulfillmentStatus,
     PaymentMethod,
     RunLogKind,
     SourceSystem,
@@ -105,7 +106,7 @@ def test_agent_proposes_convert_for_high_risk_cod_order(session: Session) -> Non
             total_inr="1000",
             customer_source_id="repeat_rto_cust",
         )
-        row.normalized = {**row.normalized, "fulfillment_status": "rto"}
+        row.normalized = {**row.normalized, "fulfillment_status": FulfillmentStatus.RTO.value}
         session.add(row)
     _seed_order(
         session,

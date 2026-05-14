@@ -1,7 +1,6 @@
 from decimal import Decimal
 
 from munim.agents.rto_mitigator.scoring import (
-    RTODecision,
     RTOWeights,
     score_signals,
 )
@@ -45,11 +44,11 @@ def test_high_score_returns_convert_to_prepaid() -> None:
     assert decision.score >= 0.6
 
 
-def test_estimated_inr_saved_is_proportional_to_order_value() -> None:
+def test_estimated_inr_saved_scales_linearly_with_order_value() -> None:
     signals = _signals(value=0.8, pincode=0.7, time=0.7, customer=0.6)
     low = score_signals(signals, total_inr=Decimal("1000"))
     high = score_signals(signals, total_inr=Decimal("10000"))
-    assert high.estimated_inr_saved > low.estimated_inr_saved
+    assert high.estimated_inr_saved == low.estimated_inr_saved * 10
 
 
 def test_decision_records_all_signal_scores_in_diagnostic() -> None:
@@ -59,10 +58,16 @@ def test_decision_records_all_signal_scores_in_diagnostic() -> None:
     assert "pincode" in decision.signal_scores
     assert "time" in decision.signal_scores
     assert "customer" in decision.signal_scores
-    assert isinstance(decision, RTODecision)
 
 
 def test_weights_default_sum_to_one() -> None:
     w = RTOWeights()
-    total = w.value + w.pincode + w.time + w.customer + w.category
+    total = w.value + w.pincode + w.time + w.customer
     assert abs(total - 1.0) < 1e-9
+
+
+def test_estimated_inr_saved_is_decimal_and_clean_cents() -> None:
+    signals = _signals(value=0.8, pincode=0.7, time=0.7, customer=0.6)
+    decision = score_signals(signals, total_inr=Decimal("1234.56"))
+    assert isinstance(decision.estimated_inr_saved, Decimal)
+    assert decision.estimated_inr_saved.as_tuple().exponent == -2

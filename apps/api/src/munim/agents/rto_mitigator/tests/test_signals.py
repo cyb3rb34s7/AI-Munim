@@ -10,7 +10,12 @@ from munim.agents.rto_mitigator.signals import (
     time_of_order_risk,
 )
 from munim.models import Record
-from munim.shared.constants import EntityType, SourceSystem
+from munim.shared.constants import (
+    EntityType,
+    FulfillmentStatus,
+    PaymentMethod,
+    SourceSystem,
+)
 
 
 def _seed_order(
@@ -19,10 +24,22 @@ def _seed_order(
     source_id: str,
     customer_id: str,
     pincode: str,
-    payment_method: str,
+    payment_method: PaymentMethod,
     total_inr: str,
     placed_at: str = "2026-05-10T03:45:32Z",
+    fulfillment_status: str | None = None,
 ) -> Record:
+    normalized: dict[str, str | None] = {
+        "placed_at": placed_at,
+        "total_inr": total_inr,
+        "currency": "INR",
+        "payment_method": payment_method.value,
+        "financial_status": "pending",
+        "pincode": pincode,
+        "customer_source_id": customer_id,
+    }
+    if fulfillment_status is not None:
+        normalized["fulfillment_status"] = fulfillment_status
     row = Record(
         merchant_id="m_default",
         source_system=SourceSystem.SHOPIFY.value,
@@ -31,15 +48,7 @@ def _seed_order(
         fetched_at=datetime.now(UTC),
         payload_hash=f"h_{source_id}",
         raw={"id": source_id},
-        normalized={
-            "placed_at": placed_at,
-            "total_inr": total_inr,
-            "currency": "INR",
-            "payment_method": payment_method,
-            "financial_status": "pending",
-            "pincode": pincode,
-            "customer_source_id": customer_id,
-        },
+        normalized=normalized,
     )
     session.add(row)
     session.flush()
@@ -77,10 +86,17 @@ def test_pincode_risk_missing_pincode_returns_baseline_with_diagnostic() -> None
     assert result.diagnostic["pincode"] is None
 
 
-def test_time_of_order_risk_late_night_returns_high_score() -> None:
+def test_time_of_order_risk_ist_late_night_returns_high_score() -> None:
     result = time_of_order_risk("2026-05-10T23:45:00+05:30")
     assert result.score >= 0.6
     assert result.diagnostic["hour_band"] == "late_night"
+
+
+def test_time_of_order_risk_utc_input_converts_to_ist_late_night() -> None:
+    result = time_of_order_risk("2026-05-10T18:15:00Z")
+    assert result.score >= 0.6
+    assert result.diagnostic["hour_band"] == "late_night"
+    assert result.diagnostic["hour_ist"] == 23
 
 
 def test_time_of_order_risk_business_hours_returns_low_score() -> None:
@@ -89,10 +105,26 @@ def test_time_of_order_risk_business_hours_returns_low_score() -> None:
     assert result.diagnostic["hour_band"] == "business_hours"
 
 
+def test_time_of_order_risk_naive_datetime_raises() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="timezone"):
+        time_of_order_risk("2026-05-10T23:45:00")
+
+
 def test_customer_rto_rate_no_history_returns_population_baseline(session: Session) -> None:
     result = customer_rto_rate(session, "m_default", "new_customer_x")
     assert result.score == 0.2
     assert result.diagnostic["history_count"] == 0
+    assert result.diagnostic["confident"] is False
+
+
+def test_customer_rto_rate_missing_customer_id_returns_baseline_with_diagnostic(
+    session: Session,
+) -> None:
+    result = customer_rto_rate(session, "m_default", None)
+    assert result.score == 0.2
+    assert result.diagnostic["customer_id_missing"] is True
     assert result.diagnostic["confident"] is False
 
 
@@ -103,11 +135,13 @@ def test_customer_rto_rate_with_history_uses_observed_rate(session: Session) -> 
             source_id=f"hist_{i}",
             customer_id="customer_x",
             pincode="560001",
-            payment_method="cod",
+            payment_method=PaymentMethod.COD,
             total_inr="1000",
+            fulfillment_status=FulfillmentStatus.RTO.value if i < 2 else None,
         )
     session.commit()
 
     result = customer_rto_rate(session, "m_default", "customer_x")
     assert result.diagnostic["history_count"] == 5
+    assert result.diagnostic["rto_count"] == 2
     assert result.diagnostic["confident"] is True

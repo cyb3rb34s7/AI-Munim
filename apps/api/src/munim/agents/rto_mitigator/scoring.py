@@ -7,20 +7,20 @@ from pydantic import BaseModel, ConfigDict
 from munim.agents.rto_mitigator.signals import SignalResult
 from munim.shared.constants import AgentActionType
 
-_CONVERT_THRESHOLD = 0.6
-_CALL_THRESHOLD = 0.4
-_CONVERT_SUCCESS_RATE = 0.7
-_CALL_SUCCESS_RATE = 0.4
+_CONVERT_THRESHOLD = Decimal("0.6")
+_CALL_THRESHOLD = Decimal("0.4")
+_CONVERT_SUCCESS_RATE = Decimal("0.7")
+_CALL_SUCCESS_RATE = Decimal("0.4")
+_NO_ACTION_SUCCESS_RATE = Decimal("0")
 
 
 class RTOWeights(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    value: float = 0.25
-    pincode: float = 0.30
-    time: float = 0.15
-    customer: float = 0.20
-    category: float = 0.10
+    value: float = 0.28
+    pincode: float = 0.33
+    time: float = 0.17
+    customer: float = 0.22
 
 
 @dataclass
@@ -42,17 +42,20 @@ def score_signals(
 ) -> RTODecision:
     w = weights if weights is not None else RTOWeights()
 
-    weight_map = {
-        "value": w.value,
-        "pincode": w.pincode,
-        "time": w.time,
-        "customer": w.customer,
-        "category": w.category,
+    weight_map: dict[str, Decimal] = {
+        "value": Decimal(str(w.value)),
+        "pincode": Decimal(str(w.pincode)),
+        "time": Decimal(str(w.time)),
+        "customer": Decimal(str(w.customer)),
     }
-    score = 0.0
+    score = Decimal("0")
     for name, signal in signals.items():
-        score += signal.score * weight_map.get(name, 0.0)
-    score = min(score, 1.0)
+        wt = weight_map.get(name)
+        if wt is None:
+            continue
+        score += Decimal(str(signal.score)) * wt
+    if score > Decimal("1"):
+        score = Decimal("1")
 
     if score >= _CONVERT_THRESHOLD:
         action = AgentActionType.CONVERT_TO_PREPAID
@@ -62,19 +65,17 @@ def score_signals(
         success_rate = _CALL_SUCCESS_RATE
     else:
         action = AgentActionType.NO_ACTION
-        success_rate = 0.0
+        success_rate = _NO_ACTION_SUCCESS_RATE
 
-    estimated_saved = (total_inr * Decimal(str(score)) * Decimal(str(success_rate))).quantize(
-        Decimal("0.01")
-    )
+    estimated_saved = (total_inr * score * success_rate).quantize(Decimal("0.01"))
+    if action is AgentActionType.NO_ACTION:
+        estimated_saved = Decimal("0")
 
     reasoning = _build_reasoning(score, action, signals)
     return RTODecision(
-        score=score,
+        score=float(score),
         action=action,
-        estimated_inr_saved=(
-            estimated_saved if action is not AgentActionType.NO_ACTION else Decimal("0")
-        ),
+        estimated_inr_saved=estimated_saved,
         signal_scores={name: s.score for name, s in signals.items()},
         signal_diagnostics={name: s.diagnostic for name, s in signals.items()},
         weights=w,
@@ -83,11 +84,11 @@ def score_signals(
 
 
 def _build_reasoning(
-    score: float, action: AgentActionType, signals: dict[str, SignalResult]
+    score: Decimal, action: AgentActionType, signals: dict[str, SignalResult]
 ) -> str:
     top_signal = max(signals.items(), key=lambda kv: kv[1].score)
     return (
-        f"score={score:.2f} -> {action.value}; "
+        f"score={float(score):.2f} -> {action.value}; "
         f"top signal: {top_signal[0]}={top_signal[1].score:.2f} "
         f"({top_signal[1].diagnostic})"
     )
