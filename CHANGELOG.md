@@ -19,6 +19,42 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-15 — Phase 7 frontend shell + chat + agent runs
+
+**What changed:** Shipped the frontend for the two scored axes of the brief plus the polished shell that contains them.
+- **Lavender token system** rewritten in `globals.css`: light + dark, expanded scale (surface / surface-elevated / surface-subtle / sidebar-* / fg / fg-muted / fg-subtle / border / border-strong / ring / primary / primary-hover / accent / pop / success / warning / destructive), rounded radii (md=14px, lg=20px, xl=28px). Legacy aliases (`muted`, `error`, `bg-subtle`) mapped to new tokens so the migration didn't have to be atomic.
+- **shadcn-style UI primitives** in `shared/ui/`: Button (cva variants: primary/secondary/ghost/destructive/pop), Card + Header/Title/Description/Content, Sheet (Radix Dialog as side drawer), ScrollArea, Avatar, Badge, Separator, Tooltip, Skeleton, Toaster (Sonner). All on Radix headless + Tailwind v4 + `tw-animate-css` for the sheet's `data-state` animation classes.
+- **App shell** in `shared/layout/`: 3-column grid (Sidebar 248px + Main + FeedPanel 360px) with framer-motion page transitions. Sidebar has dark surface, icon nav with animated active indicator (`layoutId` shared transition), and a theme cycle button (light → dark → system).
+- **`/chat`** — POST `/chat/messages`, citation badges parsed inline from `[cite:N]` markers, hover Tooltip shows source_id + entity_type, avatar persona, typing indicator while pending, empty state with 4 suggestion chips.
+- **`/agents`** — table of runs with TriggerAgentButton, ?run=<id> opens a detail sheet with action distribution donut (Recharts), per-order decisions (signal scores, INR saved, full reasoning).
+- **FeedPanel** — `useAgentNudges` polls `GET /agent-runs?limit=10` every 30s, NudgeCards render the last 10 runs, Sonner toast fires on new arrivals with a Review action that deep-links to the agent run.
+- **Connectors + Records** light migration: pages now wrap content in `fadeUp` motion, legacy `text-muted` / `text-error` / `bg-bg-subtle` rewritten to the new tokens, internal logic untouched.
+- **Router**: `/` → redirect to `/chat`; `/chat`, `/agents`, `/connectors`, `/records` under the new AppShell. Old IndexPage and `shared/components/{AppShell,NavLink}` deleted.
+
+**Why:** The brief is graded half on craft, half on judgment. The chat surface (with citations) and the agent runs surface (with the deterministic-reasoning audit log) are the two scored axes; both shipped behind a shell that looks like a product, not a demo.
+
+**Files touched (load-bearing):**
+- `apps/web/src/styles/globals.css`
+- `apps/web/src/shared/ui/*` (10 new files + barrel)
+- `apps/web/src/shared/layout/{AppShell,Sidebar,FeedPanel}.tsx`
+- `apps/web/src/shared/utils/{cn,motion}.ts`
+- `apps/web/src/modules/chat/**` (api/client, hooks/useChat, components/CitationBadge|MessageBubble|MessageList|ChatInput, ChatPage)
+- `apps/web/src/modules/agent_runs/**` (api/client with Zod schemas mirroring backend StrEnum, hooks/useAgentRuns|useAgentRun|useTriggerAgent, components/RunsTable|RunDetailSheet|ActionDonut|TriggerAgentButton, AgentRunsPage)
+- `apps/web/src/modules/feed/**` (hooks/useAgentNudges with sonner toast, components/NudgeCard|NudgeFeed)
+- `apps/web/src/router.tsx`, `apps/web/src/main.tsx` (Toaster mount)
+- `apps/web/package.json`: +`framer-motion`, `recharts`, `sonner`, `lucide-react`, `class-variance-authority`, `clsx`, `tailwind-merge`, `tw-animate-css`, 7 Radix headless packages
+
+**Reverts cleanly?:** yes — all changes are scoped to `apps/web/` and the legacy components (`Button.tsx`, `Card.tsx`) were retained alongside the new primitives, so no cascading downstream breakage.
+
+**Honest gaps documented:**
+- No streaming chat (typing indicator covers the latency).
+- No chat history persistence (stateless per Phase 5 Option A).
+- No mobile layout (desktop-first; feed panel hides below 1024px, sidebar collapses no further).
+- Component tests minimal — Zod boundary validation + manual smoke is the v0 gate.
+- `useAgentNudges` toast fires on every new `run_log_id` during polling, including ones the user triggered themselves. Acceptable for v0; dedupe pass deferred.
+
+---
+
 ## 2026-05-14 — Phase 6 review fixes
 
 **What changed:** Reviewer subagent surfaced 3 CRITICAL + 9 IMPORTANT findings against `docs/conventions.md`. All addressed in one fix commit. Highest-value catches:

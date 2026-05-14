@@ -8,7 +8,16 @@
 
 ## Now
 
-Phase 6 complete (backend + review cycle). 168 backend tests green (was 162; +6 from review fixes). RTO Risk Mitigator agent live, manually triggerable via `POST /agents/rto_mitigator/run`, full decision list (signals + weights + reasoning) persisted to `run_log` per run. Zero outbound HTTP calls — locked at the test level. Live smoke verified: a seeded ₹6000 high-pincode-risk late-night COD order scores 0.618 → `convert_to_prepaid`, est. ₹2595.60 saved.
+Phase 7 frontend implementation complete (coder subagent). Awaiting reviewer + manual smoke. Shipped:
+- App shell (Sidebar + Main + FeedPanel) with lavender token system, light + dark.
+- `/chat` with citation badges (parsed from `[cite:N]` markers, hover Tooltip on each).
+- `/agents` with table, ?run=<id> detail sheet, action distribution donut, manual TriggerAgentButton.
+- FeedPanel with `useAgentNudges` polling `GET /agent-runs?limit=10` every 30s, Sonner toast on new arrivals.
+- Connectors + Records inherit the new shell; light migration: new tokens + fadeUp wrapper, no logic changes.
+- `pnpm typecheck`, `pnpm lint`, `pnpm build` all green.
+- Backend untouched.
+
+Phase 6 (the previous Now): 168 backend tests green. RTO Risk Mitigator agent live, manually triggerable via `POST /agents/rto_mitigator/run`, full decision list (signals + weights + reasoning) persisted to `run_log` per run. Zero outbound HTTP calls — locked at the test level. Live smoke verified: a seeded ₹6000 high-pincode-risk late-night COD order scores 0.618 → `convert_to_prepaid`, est. ₹2595.60 saved.
 
 - Agent is deterministic by design: `signals.py` (pure functions) -> `scoring.py` (weighted formula + threshold tree, Decimal end-to-end for money) -> `agent.py` (orchestrator: scan COD, score, write one RunLog).
 - One `RunLog` row per agent run; `detail_json` carries `run_id`, `agent`, `orders_scanned`, `actions_proposed`, `decisions[]` with full per-order signal scores, diagnostics, weights, action, estimated INR saved, and a one-line `reasoning` string.
@@ -29,15 +38,15 @@ Phase 6 complete (backend + review cycle). 168 backend tests green (was 162; +6 
 - 2026-05-14 — **Phase 4 complete.** Real OAuth + Admin API for Shopify. Reviewer surfaced 3 Important findings (typed decrypt error, shop-domain defense-in-depth, body truncation); all applied. 95 backend tests green. Live smoke against real Shopify dev store walked Connect → Sync → Records drawer with real Admin API data.
 - 2026-05-14 — **Phase 5 complete.** Chat backend + citation contract, the scored axis of the brief. Reviewer surfaced 8 Important findings (regex greedy comma, Unicode minus, Indian-format, used_citations cross-check, silent fallback in _row_to_citation, magic strings, observability gaps, broad except); all applied. 135 backend tests green. Live smoke against real OpenAI gpt-4o-mini + real Shopify data: chat produces grounded answers with cite markers, math correct, pincode preserved, trace_id propagated.
 - 2026-05-14 — **Phase 6 complete (backend + review cycle).** RTO Risk Mitigator agent. Deterministic signal extractors + weighted scoring + threshold tree, one `RunLog` row per run with the full decision list, `POST /agents/rto_mitigator/run` + `GET /agent-runs` endpoints. `respx.mock` test locks zero outbound HTTP (httpx specifically). Reviewer surfaced 3 CRITICAL + 9 IMPORTANT findings (timezone bug, magic strings, dead error code, float in money, silent fallback, asserts as contracts, etc.); all fixed in one commit. 168 backend tests green. Live smoke shows convert_to_prepaid with ₹2595.60 estimated saved on seeded high-risk COD.
+- 2026-05-15 — **Phase 7 implementation complete (coder).** App shell with lavender token system + Sidebar + Main + FeedPanel (right-column agent-nudge feed). Chat page with citation badges + avatar persona; Agent Runs page with detail sheet + action donut + manual trigger; FeedPanel with polling + Sonner toast on new arrivals. shadcn-style UI primitives on Radix headless (Button/Card/Sheet/Tooltip/Badge/Avatar/Skeleton/Toaster/ScrollArea/Separator). Connectors + Records light migration: new tokens + fadeUp wrapper, no logic changes. Awaiting reviewer cycle + user manual smoke. See `CHANGELOG.md` 2026-05-15 entry for files touched.
 
 ---
 
 ## Next
 
-1. **Phase 7 — Frontend chat page.** `useChat` hook, citation badges, `POST /chat/messages` wired, streaming optional.
-2. **Phase 8 — Frontend agent runs page.** Agent runs table, run detail view, manual-trigger button. Backend is ready (`GET /agent-runs`, `GET /agent-runs/{id}`, `POST /agents/{name}/run`).
-3. **Phase 9 — Demo seed data + `docker-compose up` story + README rewrite** (the deliverable's headline artifact).
-4. **Phase 10 — Meta Ads + Shiprocket connectors.** Same pattern as Shopify Phase 4. Shiprocket unblocks real `customer_rto_rate` for the agent.
+1. **Phase 7 review + manual smoke** — reviewer subagent against `docs/conventions.md`; user manual smoke; fix cycle.
+2. **Phase 8 — Demo seed data + `docker-compose up` story + README rewrite** (the deliverable's headline artifact).
+3. **Phase 9 — Meta Ads + Shiprocket connectors.** Same pattern as Shopify Phase 4. Shiprocket unblocks real `customer_rto_rate` for the agent.
 
 Ranking re-evaluated at the start of each new phase.
 
@@ -257,6 +266,28 @@ Initial fix was a manual `os.environ["OPENAI_API_KEY"] = settings.openai_api_key
 
 Non-obvious choices made during the build. Different from `CHANGELOG.md` (mechanical: what changed). This is judgmental: why we picked X over Y.
 
+### 2026-05-15 — Phase 7: legacy `Button.tsx` / `Card.tsx` retained alongside new `shared/ui` primitives
+
+**Decision:** The plan called for deleting `apps/web/src/shared/components/{Button,Card}.tsx` and migrating every call site to `@/shared/ui`. We deleted only `AppShell.tsx` and `NavLink.tsx`, kept `Button.tsx`/`Card.tsx`/`Loader.tsx`/`EmptyState.tsx`/`StatusBadge.tsx` in place. The legacy `Button` was visually retuned to the new tokens but kept its `loading` prop (the existing Connectors/Records call sites depend on it). The legacy `Card` was retuned similarly but kept its `title` / `trailing` prop API (different from the new composable `CardHeader > CardTitle/Description` pattern).
+
+**Why:** A full migration would have required reworking 6 call sites' button-with-spinner ergonomics and rewriting every legacy `<Card title=... trailing=...>` into the composable shape. Per the plan's own "NO behavior changes / NO refactors" guard on connectors+records, the visual cohesion goal (every page looks like the new token system) is achieved by retuning the legacy primitives internally. Net result: two `Button` and two `Card` components in the tree — one composable (used by the new modules) and one prop-driven legacy (used by Connectors + Records + Health). Not ideal, but the right tradeoff for a v0 with a 48-hour clock.
+
+**Revisit if:** a third call-site for the legacy Button/Card surfaces (would force a real cleanup), OR if the visual divergence between the two becomes obvious.
+
+### 2026-05-15 — Phase 7: legacy color tokens (`muted`, `error`, `bg-subtle`) aliased in globals.css, not removed
+
+**Decision:** The new `globals.css` defines the new lavender token scale (`fg-muted`, `destructive`, `surface-subtle`, etc.) AND keeps three alias entries — `--color-muted: hsl(var(--fg-muted))`, `--color-error: hsl(var(--destructive))`, `--color-bg-subtle: hsl(var(--surface-subtle))` — so the pre-Phase-7 utility classes (`text-muted`, `text-error`, `bg-bg-subtle`) still resolve to a sensible color in the new palette. We migrated most call sites to the new token names, but the aliases meant we never had a build-broken intermediate state.
+
+**Why:** With 16+ files referencing the old tokens, atomic migration would have blocked the build between Task 1 and Task 7 and forced a single big diff. The aliases let each task ship green incrementally. Task 7 then cleaned up the remaining literal references at leisure.
+
+**Revisit if:** the legacy aliases hide a genuine "the new design wants `fg-muted` to be different from `muted`" decision later. Today they're a 1:1 forward — safe.
+
+### 2026-05-15 — Phase 7: `useThemeStore` toggle cycles light → dark → system (not light → dark)
+
+**Decision:** The plan referenced a `toggle()` method on the theme store that doesn't actually exist; the real store exposes `theme: 'light' | 'dark' | 'system'` + `setTheme(theme)`. The sidebar button cycles through all three preferences (light → dark → system → light…) using a `NEXT_THEME` lookup.
+
+**Why:** Three states is what the store already supports, and removing 'system' would have been a regression. Cycling shows the user all three states explicitly; the icon next to the label (sun / moon / monitor) telegraphs which one is active.
+
 ### 2026-05-14 — Phase 6: RTO Mitigator is deterministic, not LLM-driven
 
 **Decision:** The agent's "intelligence" is a weighted sum of named signals plus a 3-bucket threshold tree, all module-level constants. No LLM call inside the agent loop. The run log records every signal's score and diagnostic, the exact weights used, the threshold crossed, and the per-order decision.
@@ -379,4 +410,5 @@ Tracked here as we go, summarised in the README at the end.
 - 2026-05-13 — Pre-build governance docs (`docs/conventions.md`, `CLAUDE.md`, `CHANGELOG.md`, this file): drafted by Claude (Opus 4.7) in this session, based on the user's spoken guidelines + the existing `docs/` foundation. User reviewed and iterated on the guideline list before writing started; structure and rule-set is collaborative, prose is Claude's.
 - 2026-05-13 — Phase 1 implementation (backend foundations, frontend scaffold, infra, `/health` tracer): generated by Claude in this session under direct user instruction. The user approved the scope; Claude wrote the code without dispatching a subagent (user's explicit override of the standard workflow — Phase 1 was mechanical scaffolding). Bugs surfaced + fixed in-session: N818 lint, Windows tempdir cleanup, Vite TS inference on the API client, missing `@types/node`.
 - 2026-05-13 — Phase 2 implementation (universal schema, RowSink, ShopifyConnector): executed by Claude Sonnet 4.6 as a coder subagent dispatched per the `superpowers:subagent-driven-development` workflow. Followed plan top-to-bottom, TDD per task. Issues surfaced + resolved in-session: ruff F821 + mypy name-defined for forward-reference RowSink in Task 4 (dual-suppress bridge, cleaned up in Task 5); ruff I001 import sort in test_tables.py (auto-fixed); mypy `dict` → `dict[str, Any]` in test_order.py; ruff RUF059 unused unpacked variable (prefixed with `_`); ruff I001 + format in test_mapper.py (typed fixture annotation).
+- 2026-05-15 — Phase 7 implementation (frontend shell + chat page + agent runs page + agent-nudge feed): executed by Claude Opus 4.7 as a coder subagent dispatched per the `superpowers:subagent-driven-development` workflow. Followed the 8-task plan top-to-bottom. Key adjustments vs. plan: (1) `tw-animate-css` imported in `globals.css` from the start (plan flagged it as conditional; we pre-installed it to head off the sheet animation issue); (2) legacy `Button.tsx` / `Card.tsx` retained alongside new `shared/ui` primitives instead of deleted (see Decisions, Phase 7 entry); (3) theme button cycles light → dark → system using the real store (plan referenced a non-existent `toggle()`); (4) feed module's `useAgentNudges` imports `fetchAgentRuns` from `agent_runs/api/client.ts`, so the agent_runs client was created in Task 4's commit rather than Task 5's. Live smoke is the user's responsibility — coder did not execute the browser walk.
 - 2026-05-14 — Phase 5 implementation (chat layer + citation contract): executed by Claude Sonnet 4.6 as a coder subagent. Key adjustments vs. plan: (1) `ToolReturnPart` imported from public `pydantic_ai.messages` not private `_agent_graph._messages`; (2) `TestModel(call_tools=[...])` added to control tool invocation in agent tests — plan assumed `custom_output_args` would skip tools, but pydantic-ai 1.96.0 defaults to calling all tools; (3) `GroundedAnswer` kept without `extra="forbid"` to avoid structured-output schema conflicts; (4) regex pattern restructured into `_ENTITY_NOUNS` constant to avoid line-length violation in VERBOSE regex comments; (5) `₹` in test strings replaced with `Rs.` for Windows terminal encoding compatibility in test assertions (enforcer regex handles both).
