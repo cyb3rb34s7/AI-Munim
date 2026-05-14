@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from munim.modules.chat.router import router as chat_router
 from munim.modules.connectors.router import router as connectors_router
 from munim.modules.health.router import router as health_router
 from munim.modules.records.router import router as records_router
@@ -39,6 +40,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(connectors_router)
     app.include_router(records_router)
+    app.include_router(chat_router)
     return app
 
 
