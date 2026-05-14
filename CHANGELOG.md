@@ -19,6 +19,24 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-14 — Phase 6: RTO Risk Mitigator agent (backend)
+
+**What changed:** New `apps/api/src/munim/agents/rto_mitigator/` package — pure-function signal extractors (`order_value_bucket`, `pincode_risk`, `time_of_order_risk`, `customer_rto_rate`), weighted scoring with threshold tree (`convert_to_prepaid` >= 0.6, `confirmation_call` >= 0.4, else `no_action`), and a deterministic orchestrator that scans COD orders, scores each, and writes ONE `RunLog` row per agent run containing the full per-order decision list in `detail_json`. New `modules/agent_runs/` exposes `POST /agents/{name}/run`, `GET /agent-runs`, `GET /agent-runs/{id}` (all under the standard envelope). New `AgentName` + `AgentActionType` StrEnums in `shared/constants.py` so the action set is type-checked. The agent is deterministic (no LLM) by design — auditable, cheap, predictable; the brief asks for visible reasoning, which the run log provides as exact math.
+
+**No side effects:** dedicated test `test_agent_makes_zero_outbound_http_calls` uses `respx.mock` so any outbound HTTP call from the agent would be intercepted and fail. This locks the brief's "AI employee proposes, doesn't dispatch" constraint at the test level.
+
+**Test count:** 135 -> 162 (+27): 9 signals + 6 scoring + 7 agent + 5 endpoint.
+
+**Files touched:** `apps/api/src/munim/agents/**`, `apps/api/src/munim/modules/agent_runs/**`, `apps/api/src/munim/shared/constants.py`, `apps/api/src/munim/main.py`, `apps/api/scripts/seed_cod_order.py`.
+
+**Demo seeding:** `apps/api/scripts/seed_cod_order.py` adds one high-RTO-risk COD order to the local DB. Shopify dev-store quirk: `draftOrderComplete(paymentPending: true)` does not populate `payment_gateway_names`, so the mapper defaults to PREPAID and the agent filters the order out. Until we have a real COD path from Shopify, this local seed is documented as demo-only. Run with `uv run python scripts/seed_cod_order.py` from `apps/api/`.
+
+**Out of scope (deferred):** LLM-driven decisions (deterministic by design); Shiprocket-backed customer history (Phase 10 — for now < 3 orders returns population baseline 0.2); `product_category` signal (needs schema change, weight 0.1 so impact is small); cron auto-fire (manual trigger only in v0); per-decision RunLog rows (one-per-run is the design); frontend Agent Runs page (Phase 8).
+
+**Reverts cleanly?:** yes — drop `agents/` and `modules/agent_runs/`, revert `constants.py` and `main.py`.
+
+---
+
 ## 2026-05-14 — Phase 5: chat layer with citation contract (backend)
 
 **What changed:** Backend chat surface live. New `apps/api/src/munim/chat/` package: `RowCitation` + `ToolResult` + `GroundedAnswer` + `AnsweredQuestion` types; the fail-closed citation enforcer that strips any numeric claim not immediately followed by `[cite:row_id]` markers; typed tools (`query_orders`, `compute_metric`, `propose_action`) backed by real `record` rows; the PydanticAI agent orchestrator (OpenAI gpt-4o-mini default, override via `OPENAI_CHAT_MODEL` env) with the citation-contract system prompt and `GroundedAnswer` structured output. New `modules/chat/` exposes `POST /chat/messages`. All tests use PydanticAI's `TestModel` for the LLM — zero real OpenAI calls in CI; one optional env-gated live test for the operator.

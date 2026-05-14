@@ -8,17 +8,13 @@
 
 ## Now
 
-Phase 5 complete + review fixes + live OpenAI smoke. 135 backend tests green. Frontend chat page is Phase 6.
-- pydantic-ai 1.96.0 installed; TestModel API confirmed (custom_output_args + call_tools=[...]).
-- ToolReturnPart.content holds the raw Python return value — citation walk confirmed empirically.
-- Enforcer regex (post-review): currency (₹/Rs./$) + percent + count+entity_noun + comma-thousands + Indian shortform (lakh/crore/cr). All branches allow optional leading minus ([-−]?) so stripped negatives don't leave a hanging sign. Currency uses strict \d{1,3}(?:,\d{3})* so sentence commas are preserved. used_citations cross-check now enforced. _PROXIMITY_CHARS=64.
-- Reviewer surfaced 8 Important findings; all applied: greedy currency comma → strict, Unicode minus consumed, Indian-format branch, used_citations validation, _row_to_citation no-fallback, MetricFormula StrEnum, magic-string-in-test, structured logging + trace_id in run_log, narrow except in agent.
-- **Live smoke (2026-05-14, real OpenAI gpt-4o-mini, real Shopify data):**
-  - Q: "How many orders do I have, and what is the total revenue?"
-  - A: "You have 3 orders[cite:1,2,3] with a total revenue of Rs.44.97[cite:1,2,3]." (math: 13.07 + 23.00 + 8.90 = 44.97 ✓)
-  - Q: "Show me my orders shipping to Bengaluru pincode 560001."
-  - A: "You have 1 order[cite:3] shipping to Bengaluru (pincode 560001) worth Rs.13.07[cite:3]." (pincode preserved as categorical, count + currency both cited)
-- Final state: 135/135 tests, ruff + mypy clean, frontend untouched.
+Phase 6 complete (backend). 162 backend tests green. RTO Risk Mitigator agent live, manually triggerable via `POST /agents/rto_mitigator/run`, full decision list (signals + weights + reasoning) persisted to `run_log` per run. Zero outbound HTTP calls — locked at the test level. Frontend Agent Runs page is Phase 8; frontend chat page is Phase 7.
+
+- Agent is deterministic by design: `signals.py` (pure functions) -> `scoring.py` (weighted formula + threshold tree) -> `agent.py` (orchestrator: scan COD, score, write one RunLog).
+- One `RunLog` row per agent run; `detail_json` carries `run_id`, `agent`, `orders_scanned`, `actions_proposed`, `decisions[]` with full per-order signal scores, diagnostics, weights, action, estimated INR saved, and a one-line `reasoning` string.
+- `respx.mock` test locks the brief's "don't actually send anything" constraint.
+- Customer signal returns population baseline 0.2 for any customer with < 3 history; documented honestly. Score path uses real customer-RTO rate only once history is meaningful.
+- `apps/api/scripts/seed_cod_order.py` seeds one high-RTO-risk local COD row so the live demo has something non-trivial to show — Shopify's `draftOrderComplete(paymentPending: true)` quirk means real COD orders aren't yet produced through the connector path.
 
 ---
 
@@ -32,16 +28,16 @@ Phase 5 complete + review fixes + live OpenAI smoke. 135 backend tests green. Fr
 - 2026-05-14 — **Phase 3 complete.** Connectors + Records API, AppShell + nav, two new frontend modules. End-to-end demo working at `/connectors` and `/records`. Reviewer subagent surfaced 2 Important findings (ConnectorSyncError dead code + duplicated records query key); all applied + tests added. Live browser smoke (agent-browser) walked all 8 steps of the recipe — pass.
 - 2026-05-14 — **Phase 4 complete.** Real OAuth + Admin API for Shopify. Reviewer surfaced 3 Important findings (typed decrypt error, shop-domain defense-in-depth, body truncation); all applied. 95 backend tests green. Live smoke against real Shopify dev store walked Connect → Sync → Records drawer with real Admin API data.
 - 2026-05-14 — **Phase 5 complete.** Chat backend + citation contract, the scored axis of the brief. Reviewer surfaced 8 Important findings (regex greedy comma, Unicode minus, Indian-format, used_citations cross-check, silent fallback in _row_to_citation, magic strings, observability gaps, broad except); all applied. 135 backend tests green. Live smoke against real OpenAI gpt-4o-mini + real Shopify data: chat produces grounded answers with cite markers, math correct, pincode preserved, trace_id propagated.
+- 2026-05-14 — **Phase 6 complete (backend).** RTO Risk Mitigator agent. Deterministic signal extractors + weighted scoring + threshold tree, one `RunLog` row per run with the full decision list, `POST /agents/rto_mitigator/run` + `GET /agent-runs` endpoints. `respx.mock` test locks zero outbound HTTP. 162 backend tests green. Reviewer + manual smoke pending.
 
 ---
 
 ## Next
 
-1. **Phase 6 — Frontend chat page.** `useChat` hook, citation badges, `POST /chat/messages` wired, streaming optional.
-2. **Phase 7 — RTO Risk Mitigator agent.** APScheduler cron + signal extraction + scoring + `run_log` writes. No side effects.
-3. **Phase 8 — Frontend agent runs page.** Agent runs table, run detail.
-4. **Phase 9 — Demo seed data + `docker-compose up` story + README rewrite** (the deliverable's headline artifact).
-5. **Phase 10 — Meta Ads + Shiprocket connectors.** Same pattern as Shopify Phase 4.
+1. **Phase 7 — Frontend chat page.** `useChat` hook, citation badges, `POST /chat/messages` wired, streaming optional.
+2. **Phase 8 — Frontend agent runs page.** Agent runs table, run detail view, manual-trigger button. Backend is ready (`GET /agent-runs`, `GET /agent-runs/{id}`, `POST /agents/{name}/run`).
+3. **Phase 9 — Demo seed data + `docker-compose up` story + README rewrite** (the deliverable's headline artifact).
+4. **Phase 10 — Meta Ads + Shiprocket connectors.** Same pattern as Shopify Phase 4. Shiprocket unblocks real `customer_rto_rate` for the agent.
 
 Ranking re-evaluated at the start of each new phase.
 
@@ -216,6 +212,30 @@ Initial fix was a manual `os.environ["OPENAI_API_KEY"] = settings.openai_api_key
 ## Decisions
 
 Non-obvious choices made during the build. Different from `CHANGELOG.md` (mechanical: what changed). This is judgmental: why we picked X over Y.
+
+### 2026-05-14 — Phase 6: RTO Mitigator is deterministic, not LLM-driven
+
+**Decision:** The agent's "intelligence" is a weighted sum of named signals plus a 3-bucket threshold tree, all module-level constants. No LLM call inside the agent loop. The run log records every signal's score and diagnostic, the exact weights used, the threshold crossed, and the per-order decision.
+
+**Why:** The brief asks for "the run log and the reasoning." A deterministic scoring function produces auditable, reproducible, cheap-to-defend reasoning ("score=0.65 because pincode 110001 hit the high-risk list AND order value > ₹5000"). An LLM-driven decision would have to justify its decision after the fact, with no guarantee the justification matches the actual decision path. Auditability is the point of this agent, not creativity. The deterministic shape is also trivially testable — the `respx.mock` test that locks zero outbound HTTP calls would not be tractable against an LLM client.
+
+**Revisit if:** signal extractors start to feel like they're encoding logic better handled by a tuned model (e.g., we want to combine the customer-RTO rate with a free-text address quality score). At that point, the LLM becomes one more signal feeding the deterministic scorer — not the decider.
+
+### 2026-05-14 — Phase 6: one `RunLog` per run, decisions inline in `detail_json`
+
+**Decision:** Each agent invocation writes exactly one `RunLog` row whose `detail_json` contains the full per-order decision list. We did NOT model decisions as separate rows.
+
+**Why:** Matches `docs/architecture.md §8`. The agent's natural unit of work is "one run." A run log row that says "scanned 12 orders, proposed 4 actions, here are all 12 decisions inline" is one query to surface in the UI. Per-decision rows would force the Agent Runs page to do an N+1 fetch per run for the table view. v0 doesn't need row-level filtering across runs.
+
+**Revisit if:** the frontend wants to filter all decisions across all runs by action type, or if a decision row ever needs its own lifecycle (e.g., "approved/rejected by operator"). That's a Phase 9+ refactor, not Phase 6.
+
+### 2026-05-14 — Phase 6: high-risk-flow test seeds prior RTO history for the same customer
+
+**Decision:** The plan's `test_agent_proposes_convert_for_high_risk_cod_order` and the router's `test_get_agent_run_returns_decisions` both seed three prior `fulfillment_status="rto"` orders for the test customer before the high-risk order is placed. Without that history, the customer signal returns the population baseline (0.2) and a high-value high-risk-pincode late-night COD order computes to ~0.555 — confirmation_call, not convert_to_prepaid.
+
+**Why:** The plan's intent (high-risk inputs across all signals → convert_to_prepaid) is correct, but the original fixtures didn't account for the customer-signal baseline pulling the score below the 0.6 threshold. Seeding RTO history is the cleanest way to honor the test's intent without changing thresholds or weights.
+
+**Revisit if:** weights/thresholds tune. Test fixtures may need to follow.
 
 ### 2026-05-14 — Phase 5: enforcer `_PROXIMITY_CHARS = 64` window
 
