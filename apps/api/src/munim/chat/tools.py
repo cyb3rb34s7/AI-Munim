@@ -3,8 +3,14 @@ filtered by `merchant_id` and returns a `ToolResult` carrying both the data
 and the `RowCitation`s of the rows that produced it.
 
 `propose_action` is the only "write" tool — it persists the proposed action
-to `run_log` for a human to review. No external side effects. Matches the
-brief's "AI employee proposes, doesn't dispatch" constraint.
+to `run_log` (with `trace_id` for auditability per docs/conventions.md §5.2)
+for a human to review. No external side effects. Matches the brief's
+"AI employee proposes, doesn't dispatch" constraint.
+
+Structured logging via `get_logger` per §5.3: every tool call emits one
+`chat.tool.invoked` event with the bound trace_id (set by the request
+middleware) so a debugging operator can grep one trace across HTTP →
+tool calls → DB writes.
 """
 
 from dataclasses import dataclass
@@ -19,11 +25,15 @@ from munim.models import Record, RunLog
 from munim.shared.constants import (
     EntityType,
     ErrorCode,
+    MetricFormula,
     PaymentMethod,
     RunLogKind,
     SourceSystem,
 )
 from munim.shared.errors import MunimError
+from munim.shared.logging import get_logger
+
+log = get_logger("munim.chat.tools")
 
 
 class UnknownMetricFormulaError(MunimError):
@@ -35,20 +45,31 @@ class UnknownMetricFormulaError(MunimError):
 @dataclass
 class ChatContext:
     """Bag of dependencies the tools share. Passed into each tool by the
-    agent's `RunContext`.
+    agent's `RunContext`. `trace_id` is set from `request.state.trace_id`
+    so tool writes can record it (§5.2).
     """
 
     merchant_id: str
     session: Session
+    trace_id: str | None = None
 
 
 def _row_to_citation(row: Record, fields: list[str] | None = None) -> RowCitation:
+    # Per §10 (no silent fallbacks): a `record.id` of None means the row
+    # wasn't flushed, which is a programming bug — fail loudly instead of
+    # citing "row 0" which would (a) be incorrect and (b) potentially
+    # match a real row id and falsely-verify a hallucination.
+    if row.id is None:
+        raise ValueError(
+            "Cannot cite a record before session.flush() — record.id is None. "
+            "This is a bug in the caller; flush before building citations."
+        )
     if fields is None:
         excerpt = dict(row.normalized)
     else:
         excerpt = {k: row.normalized.get(k) for k in fields}
     return RowCitation(
-        record_id=row.id if row.id is not None else 0,
+        record_id=row.id,
         entity_type=row.entity_type,
         source_system=row.source_system,
         source_id=row.source_id,
@@ -94,38 +115,58 @@ def query_orders(
         _row_to_citation(r, fields=["placed_at", "total_inr", "payment_method", "pincode"])
         for r in matched
     ]
+    log.info(
+        "chat.tool.invoked",
+        tool="query_orders",
+        merchant_id=ctx.merchant_id,
+        row_count=len(matched),
+        filters={
+            "payment_method": payment_method.value if payment_method else None,
+            "pincode": pincode,
+            "utm_campaign": utm_campaign,
+            "financial_status": financial_status,
+        },
+    )
     return ToolResult(data=data, citations=citations)
 
 
 def compute_metric(
     ctx: ChatContext,
     *,
-    formula: str,
+    formula: MetricFormula,
     payment_method: PaymentMethod | None = None,
     pincode: str | None = None,
 ) -> ToolResult[Decimal | int]:
     """Aggregate over the filtered order set. `formula` is one of:
-      - `sum_total_inr` — sum of `total_inr` over orders matching the filter.
-      - `count_orders` — count of orders matching the filter.
+      - `MetricFormula.SUM_TOTAL_INR` — sum of `total_inr` over filter.
+      - `MetricFormula.COUNT_ORDERS` — count of matched orders.
 
     Citations include every row that contributed to the aggregate.
     """
-    filtered = query_orders(
-        ctx,
-        payment_method=payment_method,
-        pincode=pincode,
-    )
+    filtered = query_orders(ctx, payment_method=payment_method, pincode=pincode)
 
-    if formula == "sum_total_inr":
-        total = sum((Decimal(d["total_inr"]) for d in filtered.data), start=Decimal("0"))
-        return ToolResult(data=total, citations=filtered.citations)
-    if formula == "count_orders":
-        return ToolResult(data=len(filtered.data), citations=filtered.citations)
+    result: Decimal | int
+    if formula is MetricFormula.SUM_TOTAL_INR:
+        result = sum((Decimal(d["total_inr"]) for d in filtered.data), start=Decimal("0"))
+    elif formula is MetricFormula.COUNT_ORDERS:
+        result = len(filtered.data)
+    else:
+        # Unreachable when typed correctly; defensive in case the LLM
+        # passes an unknown string and PydanticAI didn't coerce to enum.
+        raise UnknownMetricFormulaError(
+            message=f"Unknown metric formula: {formula!r}.",
+            details={"formula": str(formula)},
+        )
 
-    raise UnknownMetricFormulaError(
-        message=f"Unknown metric formula: {formula!r}. Known: sum_total_inr, count_orders.",
-        details={"formula": formula},
+    log.info(
+        "chat.tool.invoked",
+        tool="compute_metric",
+        merchant_id=ctx.merchant_id,
+        formula=formula.value,
+        rows_aggregated=len(filtered.citations),
+        result_kind=type(result).__name__,
     )
+    return ToolResult(data=result, citations=filtered.citations)
 
 
 def propose_action(
@@ -139,6 +180,9 @@ def propose_action(
     """Persist a proposed action to `run_log`. NO external side effects.
     The human sees the proposal in the agent runs view (Phase 8) and
     decides whether to act.
+
+    `trace_id` is stamped into `detail_json` per §5.2 — every run_log
+    row written by the system carries the originating request's trace.
     """
     now = datetime.now(UTC)
     run = RunLog(
@@ -151,6 +195,7 @@ def propose_action(
             "target_record_id": target_record_id,
             "reasoning": reasoning,
             "evidence_record_ids": evidence_record_ids,
+            "trace_id": ctx.trace_id,
         },
     )
     ctx.session.add(run)
@@ -160,6 +205,16 @@ def propose_action(
         select(Record).where(col(Record.id).in_(evidence_record_ids))
     ).all()
     citations = [_row_to_citation(r) for r in evidence_rows]
+
+    log.info(
+        "chat.tool.invoked",
+        tool="propose_action",
+        merchant_id=ctx.merchant_id,
+        action_type=action_type,
+        target_record_id=target_record_id,
+        evidence_count=len(evidence_record_ids),
+        run_log_id=run.id,
+    )
 
     return ToolResult(
         data={

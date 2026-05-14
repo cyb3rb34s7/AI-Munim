@@ -65,3 +65,13 @@ class RunLogKind(StrEnum):
     SYNC = "sync"
     CHAT = "chat"
     AGENT = "agent"
+
+
+class MetricFormula(StrEnum):
+    """Formulas accepted by `chat.tools.compute_metric`. No magic strings
+    in the branching (§7) — the LLM passes one of these values; PydanticAI
+    coerces it into the enum at the tool boundary.
+    """
+
+    SUM_TOTAL_INR = "sum_total_inr"
+    COUNT_ORDERS = "count_orders"

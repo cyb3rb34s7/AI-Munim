@@ -19,7 +19,9 @@ from munim.chat.tools import (
 from munim.models import Record, RunLog
 from munim.shared.constants import (
     EntityType,
+    MetricFormula,
     PaymentMethod,
+    RunLogKind,
     SourceSystem,
 )
 
@@ -122,7 +124,7 @@ def test_compute_metric_sum_total_inr(session: Session) -> None:
     b = _make_record(session, source_id="B", total_inr="2199.50", payment_method="prepaid")
     session.commit()
 
-    result = compute_metric(_ctx(session), formula="sum_total_inr")
+    result = compute_metric(_ctx(session), formula=MetricFormula.SUM_TOTAL_INR)
     assert result.data == Decimal("3449.00")
     cited = {c.record_id for c in result.citations}
     assert cited == {a.id, b.id}
@@ -133,17 +135,34 @@ def test_compute_metric_count_orders(session: Session) -> None:
         _make_record(session, source_id=f"X{i}", total_inr="100", payment_method="cod")
     session.commit()
 
-    result = compute_metric(_ctx(session), formula="count_orders")
+    result = compute_metric(_ctx(session), formula=MetricFormula.COUNT_ORDERS)
     assert result.data == 5
     assert len(result.citations) == 5
 
 
-def test_compute_metric_unknown_formula_raises(session: Session) -> None:
-    # Per §10 no silent fallback: an unknown formula must raise, not return 0.
+def test_compute_metric_unhandled_formula_raises(session: Session) -> None:
+    # Defensive: if `MetricFormula` ever gains a new variant and we forget
+    # to handle it in `compute_metric`, the `else` branch raises rather
+    # than returning silently-wrong data. Force the defensive path with a
+    # cast (Pydantic coercion at the PydanticAI tool boundary catches
+    # malformed strings before reaching here in the real flow).
+    from typing import cast
+
     from munim.chat.tools import UnknownMetricFormulaError
 
     with pytest.raises(UnknownMetricFormulaError):
-        compute_metric(_ctx(session), formula="madeup_metric")
+        compute_metric(_ctx(session), formula=cast(MetricFormula, "madeup_metric"))
+
+
+def test_compute_metric_with_empty_result_set_returns_zero(session: Session) -> None:
+    # Reviewer-flagged edge case: when no rows match the filter, sum is
+    # Decimal("0") with citations=[]. A model that then cites [cite:0] in
+    # the answer would get rejected by the enforcer (0 not in available_ids).
+    # This test pins the tool-level invariant — the enforcer test covers
+    # the cross-check.
+    result = compute_metric(_ctx(session), formula=MetricFormula.SUM_TOTAL_INR)
+    assert result.data == Decimal("0")
+    assert result.citations == []
 
 
 def test_propose_action_writes_run_log_no_side_effect(session: Session) -> None:
@@ -153,13 +172,15 @@ def test_propose_action_writes_run_log_no_side_effect(session: Session) -> None:
     # `run_log` for human review.
     a = _make_record(session, source_id="A", total_inr="1249", payment_method="cod")
     session.commit()
+    assert a.id is not None  # flushed by _make_record
 
+    ctx = ChatContext(merchant_id=DEFAULT_MERCHANT_ID, session=session, trace_id="tr_test_001")
     result = propose_action(
-        _ctx(session),
+        ctx,
         action_type="convert_to_prepaid",
-        target_record_id=a.id if a.id is not None else 0,
+        target_record_id=a.id,
         reasoning="High RTO risk on this pincode.",
-        evidence_record_ids=[a.id if a.id is not None else 0],
+        evidence_record_ids=[a.id],
     )
     session.commit()
 
@@ -168,8 +189,35 @@ def test_propose_action_writes_run_log_no_side_effect(session: Session) -> None:
 
     runs = session.exec(select(RunLog)).all()
     assert len(runs) == 1
-    assert runs[0].kind == "chat"
+    # No magic strings per §7 — compare against the enum value.
+    assert runs[0].kind == RunLogKind.CHAT.value
     assert runs[0].detail_json["action_type"] == "convert_to_prepaid"
+    # trace_id was stamped into detail_json per §5.2.
+    assert runs[0].detail_json["trace_id"] == "tr_test_001"
     # The tool returns the run_log row id as data + the evidence as citations.
     assert result.data["run_log_id"] == runs[0].id
     assert {c.record_id for c in result.citations} == {a.id}
+
+
+def test_row_to_citation_raises_when_id_is_none(session: Session) -> None:
+    # Reviewer-flagged silent fallback: previously `_row_to_citation` did
+    # `record_id=row.id if row.id is not None else 0`. A `record_id=0`
+    # citation could match a real row id and "verify" a hallucination.
+    # The right behavior is to raise; flushing before citing is the
+    # caller's job.
+    from munim.chat.tools import _row_to_citation
+
+    unflushed = Record(
+        merchant_id=DEFAULT_MERCHANT_ID,
+        source_system=SourceSystem.SHOPIFY.value,
+        source_id="not_flushed",
+        entity_type=EntityType.ORDER.value,
+        fetched_at=datetime.now(UTC),
+        payload_hash="h",
+        raw={},
+        normalized={},
+    )
+    # Don't add to session; id is None.
+    assert unflushed.id is None
+    with pytest.raises(ValueError, match="flush"):
+        _row_to_citation(unflushed)

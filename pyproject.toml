@@ -26,6 +26,12 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S", "B017"]
 "**/router.py" = ["B008"]
+# The enforcer's negative-number test literally needs Unicode minus
+# characters in its source (the bug class IS Unicode minus being
+# misinterpreted as ASCII hyphen). Suppress the ambiguous-unicode
+# rules for this one file only.
+"**/chat/tests/test_enforcer.py" = ["RUF001", "RUF002", "RUF003"]
+"**/chat/enforcer.py" = ["RUF001"]
 
 [tool.ruff.format]
 quote-style = "double"

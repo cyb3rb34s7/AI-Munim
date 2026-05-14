@@ -3,14 +3,16 @@
 answer + the union of citations from every tool call.
 
 We construct the agent on every request (not module-level) so each
-request gets its own `RunContext` with the right session + merchant.
-The model itself is read from `Settings.openai_chat_model` so swapping
-to `gpt-4o` or another OpenAI model is one env-var change.
+request gets its own `RunContext` with the right session + merchant +
+trace_id. The model itself is read from `Settings.openai_chat_model`
+so swapping to `gpt-4o` or another OpenAI model is one env-var change.
 """
 
 from typing import Any
 
+import httpx
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior
 from pydantic_ai.messages import ToolReturnPart
 from pydantic_ai.models import Model
 
@@ -23,8 +25,18 @@ from munim.chat.tools import (
 )
 from munim.chat.types import AnsweredQuestion, GroundedAnswer, RowCitation, ToolResult
 from munim.shared.config import get_settings
-from munim.shared.constants import ErrorCode, PaymentMethod
+from munim.shared.constants import ErrorCode, MetricFormula, PaymentMethod
 from munim.shared.errors import MunimError
+from munim.shared.logging import get_logger
+
+log = get_logger("munim.chat.agent")
+
+
+class LLMUnavailableError(MunimError):
+    code = ErrorCode.CHAT_LLM_UNAVAILABLE.value
+    http_status = 502
+    message = "LLM call failed."
+
 
 _SYSTEM_PROMPT = """You are AI-Munim, an AI employee for a D2C founder.
 
@@ -41,6 +53,7 @@ OUTPUT CONTRACT (non-negotiable):
 - If you do not have a citation for a number, DO NOT state the number.
   Say "[unknown]" instead.
 - `used_citations` lists the row_ids you actually referenced in `text`.
+  Every row_id you cite in `text` MUST be in `used_citations`.
 
 Tools available:
 - `query_orders` — filter orders by payment_method, pincode, utm_campaign,
@@ -89,10 +102,13 @@ def build_agent(model: Model | str | None = None) -> Agent[ChatContext, Grounded
     @agent.tool
     def _compute_metric(
         run_ctx: RunContext[ChatContext],
-        formula: str,
+        formula: MetricFormula,
         payment_method: PaymentMethod | None = None,
         pincode: str | None = None,
     ) -> ToolResult[Any]:
+        # Use `Any` (not `Decimal | int`) because PydanticAI's structured
+        # output / tool schema generation prefers a single concrete type
+        # and our payload varies by formula.
         return compute_metric(
             run_ctx.deps,
             formula=formula,
@@ -129,22 +145,40 @@ async def answer_question(
     enforcer, return an AnsweredQuestion ready to ship.
 
     Citation collection: we walk `run_result.all_messages()` and look for
-    `ToolReturnPart` instances. In pydantic-ai v0.4+, `ToolReturnPart.content`
+    `ToolReturnPart` instances. In pydantic-ai 1.96.0+, `ToolReturnPart.content`
     holds the raw Python return value of the tool — which for our tools is
     a `ToolResult` instance. We check with `isinstance` before accessing.
+
+    Error handling (per §10 — narrow `except`):
+    - `MunimError` subclasses propagate unchanged (our typed domain errors).
+    - `ModelHTTPError`, `UnexpectedModelBehavior` (pydantic-ai) and
+      `httpx.HTTPError` (network) are wrapped as `LLMUnavailableError` so
+      the frontend gets a typed code rather than `system.unexpected`.
+    - Anything else propagates — bugs in tools should NOT be classified as
+      "LLM unavailable"; let the global handler surface them as
+      `system.unexpected` with the stacktrace intact.
     """
     agent = build_agent(model=model_override)
+
+    log.info(
+        "chat.agent.run.beginning",
+        merchant_id=ctx.merchant_id,
+        question_len=len(question),
+    )
 
     try:
         run_result = await agent.run(question, deps=ctx)
     except MunimError:
-        # Re-raise typed domain errors (e.g., UnknownMetricFormulaError) unchanged
-        # so the global error handler can classify them correctly.
         raise
-    except Exception as exc:
+    except (ModelHTTPError, UnexpectedModelBehavior, httpx.HTTPError) as exc:
+        log.warning(
+            "chat.agent.llm_unavailable",
+            exc_type=type(exc).__name__,
+            merchant_id=ctx.merchant_id,
+        )
         raise LLMUnavailableError(
-            message=f"LLM call failed: {exc}",
-            details={"exc_type": type(exc).__name__},
+            message="LLM call failed.",
+            details={"exc_type": type(exc).__name__, "exc_str": str(exc)[:500]},
         ) from exc
 
     # Walk message history; every ToolReturnPart whose content is a ToolResult
@@ -169,10 +203,11 @@ async def answer_question(
             unique_citations.append(c)
             seen.add(c.record_id)
 
+    log.info(
+        "chat.agent.run.completed",
+        merchant_id=ctx.merchant_id,
+        text_len=len(final_text),
+        citation_count=len(unique_citations),
+    )
+
     return AnsweredQuestion(text=final_text, citations=unique_citations)
-
-
-class LLMUnavailableError(MunimError):
-    code = ErrorCode.CHAT_LLM_UNAVAILABLE.value
-    http_status = 502
-    message = "LLM call failed."

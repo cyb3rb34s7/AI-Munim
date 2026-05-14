@@ -15,6 +15,11 @@ async def post_message(
     request: Request,
     session: Session = Depends(get_session),
 ) -> SuccessEnvelope[ChatMessageResponse]:
-    result = await handle_chat_message(session, DEFAULT_MERCHANT_ID, body.message)
+    result = await handle_chat_message(
+        session,
+        DEFAULT_MERCHANT_ID,
+        body.message,
+        trace_id=request.state.trace_id,
+    )
     session.commit()
     return SuccessEnvelope(data=result, trace_id=request.state.trace_id)

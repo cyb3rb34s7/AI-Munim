@@ -3,13 +3,17 @@
 Input: a `GroundedAnswer` from the LLM + the list of citations actually
 returned by the tools the agent called.
 
-Output: the answer's `text` with every numeric claim that's NOT immediately
-followed by a `[cite:row_id,...]` marker replaced by `[unverified number
-removed]`. Raises `CitationEnforcerError` if the answer is structurally
-dishonest (hallucinated row ids, malformed cite markers, parser failure).
+Output: the answer's `text` with every numeric claim that's NOT inside a
+"covered range" (the window before a `[cite:row_id,...]` marker) replaced
+by `[unverified number removed]`. Raises `CitationEnforcerError` if the
+answer is structurally dishonest: malformed cite marker, hallucinated row
+id, used_citations referring to a row no tool returned, or text-cite that
+isn't in used_citations.
 
-Per docs/architecture.md §5.4: the post-processor is fail-closed by design.
-If we can't be certain a number is grounded, we strip it.
+Per docs/architecture.md §5.4: fail-closed by design. If we can't be
+certain a number is grounded, we strip it. If the answer is internally
+contradictory (text cites row not declared in used_citations, or
+used_citations references a hallucinated row), we reject the whole answer.
 """
 
 import re
@@ -21,55 +25,60 @@ from munim.shared.errors import MunimError
 
 _CITE_MARKER = re.compile(r"\[cite:(?P<ids>[^\]]*)\]")
 
-# A "numeric claim" we consider must be cited:
-#   - currency: ₹1,234, ₹1,234.56, Rs.99, $50
-#   - percent: 25%, 25.5%
-#   - count + entity noun: "12 orders", "5 customers"
-#   - bare decimals/large numbers with commas: 1,234.56 (looks monetary)
-# A "numeric claim" we DON'T flag:
-#   - dates: 2026-05-14 (hyphen-separated) — excluded by lookbehind (?<![-/.])
-#     and lookahead (?![-/:]) around separator chars
-#   - times: 10:42:30 (colon-separated) — same mechanism
-#   - long bare IDs: 7218840502567 — no comma, no decimal, no entity noun,
-#     no currency prefix. The comma-thousands branch requires at least one
-#     comma (`\d{1,3}(?:,\d{3})+`), so a bare 13-digit string is not matched.
-#   - pincodes: 560001 — 6 digits, no entity noun, no currency, no comma →
-#     not matched by any branch.
-#   - numbers inside [cite:...] markers — excluded by parsing order (markers
-#     are validated and their spans become "covered ranges" before we scan
-#     for claims; the marker text itself is never re-scanned).
-#
-# Strategy:
-#   1. Find every [cite:...] marker, parse the row ids inside, validate
-#      they're all integers and that each id is in `available_citations`.
-#      Raises CitationEnforcerError if either check fails.
-#   2. Build a list of "covered ranges" — for each cite marker, the marker
-#      itself plus the ~64 chars immediately preceding it (the numeric claim
-#      it cites).
-#   3. Find every numeric claim in the text via _CLAIM_PATTERN.
-#   4. For each claim NOT inside a covered range, replace with the
-#      "[unverified number removed]" sentinel.
 # Entity nouns that mark a number as a business claim requiring citation.
-# Split to a constant so the pattern line stays under the 100-char limit.
 _ENTITY_NOUNS = (
     r"orders?|shipments?|customers?|products?|items?"
     r"|RTOs?|returns?|days?|hours?|rupees?|INR"
 )
 
+# Allow optional ASCII hyphen or Unicode minus (U+2212) at the start of a
+# match so a stripped negative number doesn't leave a stray Unicode minus.
+# Use the escape form so the source file passes ruff RUF001.
+_NEG = "[-−]?"
+
+# A numeric claim we consider must be cited:
+#   - currency: ₹1,234, ₹1,234.56, Rs.99, $50 (with optional leading minus)
+#   - percent: 25%, 25.5% (with optional leading minus)
+#   - count + entity noun: "12 orders", "5 customers"
+#   - Indian shortform: "1 lakh", "1.5 crore", "2 cr"
+#   - bare comma-thousands: "1,234", "1,234.56"
+#
+# We deliberately DON'T flag:
+#   - dates "2026-05-14" (no entity noun, no comma, no currency — no branch matches)
+#   - times "10:42" / "10:42:30" (same — no branch matches)
+#   - long bare IDs "7218840502567" (no commas, no entity noun, no currency — no branch matches)
+#   - pincodes "560001" (6 digits, no entity noun, no currency, no comma — no branch matches)
+#   - text inside [cite:...] markers (parsed first; their ranges become "covered")
+#
+# Currency / count+noun / comma-thousands branches all use the strict
+# `\d{1,3}(?:,\d{3})*` form to avoid eating sentence commas like ", up".
 _CLAIM_PATTERN = re.compile(
     r"""
-    (?<!\d)              # not preceded by a digit (avoid mid-ID matches)
-    (?<![-/:.])          # not preceded by date/time/path separators
+    (?<!\d)                                            # not preceded by a digit
     (?:
-        (?:₹|Rs\.?|\$)\s*\d[\d,]*(?:\.\d+)?   |  # currency: ₹1,234.56 / Rs.99 / $50
-        \d+(?:\.\d+)?\s*%                       |  # percent: 25% / 25.5%
-        \d[\d,]*(?:\.\d+)?\s+(?:"""
+        """
+    + _NEG
+    + r"""(?:₹|Rs\.?|\$)\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?    # currency
+        |
+        """
+    + _NEG
+    + r"""\d+(?:\.\d+)?\s*%                                # percent
+        |
+        """
+    + _NEG
+    + r"""\d{1,3}(?:,\d{3})*(?:\.\d+)?\s+(?:"""
     + _ENTITY_NOUNS
-    + r""")              |  # count + entity noun: "12 orders"
-        \d{1,3}(?:,\d{3})+(?:\.\d+)?              # comma-thousands: 1,234 / 1,234.56
+    + r""")\b                                              # count + entity noun
+        |
+        """
+    + _NEG
+    + r"""\d+(?:\.\d+)?\s*(?:lakhs?|crores?|cr)\b           # Indian shortform
+        |
+        """
+    + _NEG
+    + r"""\d{1,3}(?:,\d{3})+(?:\.\d+)?                     # comma-thousands
     )
-    (?!\d)               # not followed by a digit (avoid mid-ID matches)
-    (?![-/:])            # not followed by date/time separators
+    (?!\d)                                             # not followed by a digit
     """,
     re.VERBOSE | re.IGNORECASE,
 )
@@ -91,9 +100,10 @@ class CitationEnforcerError(MunimError):
 
 
 class UnverifiedNumberError(CitationEnforcerError):
-    """Raised internally when the enforcer would have to fail-close on a
-    specific number. Currently we instead REPLACE — see implementation —
-    but the class exists so future strict modes can fail entirely.
+    """Reserved for future strict modes that fail-close on a single uncited
+    number rather than replacing. Currently the enforcer always REPLACES;
+    this class exists so a strict caller can opt in later without changing
+    the public surface.
     """
 
     message = "An uncited numeric claim was found."
@@ -106,17 +116,35 @@ def enforce_grounded_answer(
     """Post-process a `GroundedAnswer`, returning the cleaned text.
 
     Raises `CitationEnforcerError` when:
-    - A [cite:...] marker contains non-integer ids (malformed).
+    - A [cite:...] marker is malformed (non-integer ids) or empty.
     - A [cite:...] marker references a row id not in `available_citations`
-      (hallucinated id).
+      (the model hallucinated it).
+    - `used_citations` references a row id not in `available_citations`
+      (the model claims it used a row that no tool returned).
+    - The text cites a row id not in `used_citations` (the model
+      contradicts itself between text and metadata).
 
     Replaces (rather than raises) when:
     - A numeric claim appears in the text without a nearby [cite:...] marker.
     """
     available_ids = {c.record_id for c in available_citations}
+    used_set = set(answer.used_citations)
 
-    # --- 1. Validate every [cite:...] marker. ---
+    # --- 1. Cross-check: used_citations must be a subset of available_ids. ---
+    hallucinated_in_used = used_set - available_ids
+    if hallucinated_in_used:
+        raise CitationEnforcerError(
+            message=(
+                f"used_citations references row(s) {sorted(hallucinated_in_used)} "
+                "that no tool returned — the model hallucinated these ids."
+            ),
+            details={"hallucinated_in_used": sorted(hallucinated_in_used)},
+        )
+
+    # --- 2. Validate every [cite:...] marker, collect text-cited ids,
+    #         build covered ranges. ---
     covered_ranges: list[tuple[int, int]] = []
+    text_cite_ids: set[int] = set()
     for match in _CITE_MARKER.finditer(answer.text):
         ids_str = match.group("ids")
         try:
@@ -135,18 +163,29 @@ def enforce_grounded_answer(
             if cid not in available_ids:
                 raise CitationEnforcerError(
                     message=(
-                        f"Citation refers to row {cid} which was not returned by "
+                        f"Text cite refers to row {cid} which was not returned by "
                         "any tool — the model hallucinated this id."
                     ),
                     details={"row_id": cid, "available": sorted(available_ids)},
                 )
-        # Mark a window from (marker_start - PROXIMITY_CHARS) to marker_end
-        # as "covered" — any numeric claim inside this window is considered
-        # cited by this marker.
+            text_cite_ids.add(cid)
         start = max(0, match.start() - _PROXIMITY_CHARS)
         covered_ranges.append((start, match.end()))
 
-    # --- 2. Scan for numeric claims and replace any outside covered ranges. ---
+    # --- 3. Cross-check: every id in text cite markers must be in
+    #         used_citations. (Extras in used_citations are tolerated —
+    #         the model declared more than it used; harmless.) ---
+    text_minus_used = text_cite_ids - used_set
+    if text_minus_used:
+        raise CitationEnforcerError(
+            message=(
+                f"Text cites row(s) {sorted(text_minus_used)} that are not in "
+                "used_citations — the answer contradicts its own metadata."
+            ),
+            details={"in_text_not_in_used": sorted(text_minus_used)},
+        )
+
+    # --- 4. Scan for numeric claims; replace any outside covered ranges. ---
     out_parts: list[str] = []
     cursor = 0
     for claim in _CLAIM_PATTERN.finditer(answer.text):
@@ -168,9 +207,8 @@ def _is_covered(
     end: int,
     covered_ranges: list[tuple[int, int]],
 ) -> bool:
-    """A claim is covered if its span overlaps with a covered range
-    (i.e., both the claim start and end fall within the pre-marker window
-    plus the marker itself).
+    """A claim is covered if its span is fully contained within any
+    `(cite.start - _PROXIMITY_CHARS, cite.end)` range.
     """
     for cov_start, cov_end in covered_ranges:
         if cov_start <= start and end <= cov_end:

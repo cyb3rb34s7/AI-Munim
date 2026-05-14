@@ -83,18 +83,42 @@ def test_hallucinated_row_id_in_cite_marker_raises() -> None:
         enforce_grounded_answer(answer, available_citations=[_cite(1), _cite(2)])
 
 
-def test_used_citations_must_match_text_cites() -> None:
-    # Detects model contradicting itself: claims to use citations [1,2] but
-    # the text only cites [1]. Fail closed.
+def test_used_citations_extras_are_tolerated() -> None:
+    # Lenient direction: model declared used_citations=[1,2] but text only
+    # cites [1]. Bookkeeping noise, not dishonesty — accept.
     answer = GroundedAnswer(
         text="Revenue: ₹15,750[cite:1].",
         used_citations=[1, 2],
     )
-    # Lenient: extra in used_citations is OK (declared but not used).
-    # Strict: text must only reference cites that are in available + used.
-    # Going strict — any text cite must be in both available AND used.
     out = enforce_grounded_answer(answer, available_citations=[_cite(1), _cite(2)])
     assert out == "Revenue: ₹15,750[cite:1]."
+
+
+def test_text_cites_row_not_in_used_citations_raises() -> None:
+    # The strict direction: model cites [cite:2] in text but used_citations
+    # says it only used [1]. The answer contradicts its own metadata —
+    # fail closed. Phase 5 reviewer caught this gap; the original test had
+    # the same name but actually asserted the lenient case, which is why
+    # the cross-check went untested.
+    answer = GroundedAnswer(
+        text="Revenue: ₹15,750[cite:2].",
+        used_citations=[1],
+    )
+    with pytest.raises(CitationEnforcerError) as exc_info:
+        enforce_grounded_answer(answer, available_citations=[_cite(1), _cite(2)])
+    assert "used_citations" in str(exc_info.value.message).lower()
+
+
+def test_used_citations_referring_to_unavailable_row_raises() -> None:
+    # Defense in depth: even if the text doesn't cite row 99, declaring
+    # used_citations=[99] is the model claiming it used a row that no tool
+    # returned. Fail closed before we even scan the text.
+    answer = GroundedAnswer(
+        text="Revenue: ₹15,750[cite:1].",
+        used_citations=[1, 99],
+    )
+    with pytest.raises(CitationEnforcerError):
+        enforce_grounded_answer(answer, available_citations=[_cite(1)])
 
 
 def test_date_string_preserved() -> None:
@@ -150,6 +174,20 @@ def test_multiple_uncited_numbers_in_one_sentence() -> None:
     assert out.count("[unverified number removed]") == 3
 
 
+def test_currency_does_not_eat_sentence_comma() -> None:
+    # Phase 5 reviewer found this: with `\d[\d,]*`, the currency match was
+    # greedily including the trailing sentence comma. "₹15,750, up 57%"
+    # would match "₹15,750," (with comma) — the strip would also remove the
+    # sentence comma, breaking grammar. Fixed by `\d{1,3}(?:,\d{3})*`.
+    answer = GroundedAnswer(
+        text="Revenue was ₹15,750, up sharply.",
+        used_citations=[],
+    )
+    out = enforce_grounded_answer(answer, available_citations=[])
+    # The currency is stripped, but the sentence comma stays put.
+    assert "[unverified number removed], up sharply." in out
+
+
 def test_cite_followed_by_more_text() -> None:
     answer = GroundedAnswer(
         text="Revenue was ₹15,750[cite:1] last month — a clear win.",
@@ -170,6 +208,57 @@ def test_parser_failure_fails_closed() -> None:
     )
     with pytest.raises(CitationEnforcerError):
         enforce_grounded_answer(answer, available_citations=[_cite(1)])
+
+
+def test_unicode_minus_consumed_with_negative_percent() -> None:
+    # Phase 5 reviewer caught this: when a negative percentage with Unicode
+    # minus (U+2212, sometimes output by gpt-4o) is stripped, the minus
+    # should go with the number — otherwise we leave a hanging minus and a
+    # grammar-broken sentence. The fix is `[-−]?` at the start of the
+    # percent branch. Source uses the escape form to pass ruff RUF001
+    # (which flags ambiguous Unicode chars in literals).
+    answer = GroundedAnswer(
+        text="Growth was −15% this quarter.",
+        used_citations=[],
+    )
+    out = enforce_grounded_answer(answer, available_citations=[])
+    # Neither the number nor the minus survives — single sentinel replaces both.
+    assert "15%" not in out
+    assert "−" not in out
+    assert "[unverified number removed]" in out
+
+
+def test_indian_lakh_form_is_flagged_as_uncited() -> None:
+    # "1 lakh", "1.5 crore", "2 cr" are the most natural way an Indian
+    # D2C model expresses large numbers. Without the lakhs/crore branch,
+    # "Revenue was 1.5 cr" would pass through the enforcer unflagged —
+    # a hallucinated big number ships to the merchant.
+    answer = GroundedAnswer(
+        text="Revenue was 1.5 cr this month.",
+        used_citations=[],
+    )
+    out = enforce_grounded_answer(answer, available_citations=[])
+    assert "1.5 cr" not in out
+    assert "[unverified number removed]" in out
+
+
+def test_indian_lakh_word_form_is_flagged() -> None:
+    answer = GroundedAnswer(
+        text="You have 1 lakh customers.",
+        used_citations=[],
+    )
+    out = enforce_grounded_answer(answer, available_citations=[])
+    assert "1 lakh" not in out
+
+
+def test_cited_lakh_form_passes_through() -> None:
+    # Cited Indian shortform stays intact.
+    answer = GroundedAnswer(
+        text="Revenue was 1.5 cr[cite:1] this month.",
+        used_citations=[1],
+    )
+    out = enforce_grounded_answer(answer, available_citations=[_cite(1)])
+    assert "1.5 cr[cite:1]" in out
 
 
 # Suppress unused import warning — UnverifiedNumberError is exported for
