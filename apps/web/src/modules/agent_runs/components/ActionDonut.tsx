@@ -1,11 +1,7 @@
+import { useMemo } from 'react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { useThemeStore } from '@/shared/store/theme';
 import { AgentAction, type AgentRunDecision } from '@/modules/agent_runs/api/client';
-
-const COLORS: Record<AgentAction, string> = {
-  [AgentAction.CONVERT_TO_PREPAID]: 'hsl(263 70% 60%)',
-  [AgentAction.CONFIRMATION_CALL]: 'hsl(38 92% 50%)',
-  [AgentAction.NO_ACTION]: 'hsl(263 10% 60%)',
-};
 
 const LABELS: Record<AgentAction, string> = {
   [AgentAction.CONVERT_TO_PREPAID]: 'Convert to prepaid',
@@ -13,7 +9,30 @@ const LABELS: Record<AgentAction, string> = {
   [AgentAction.NO_ACTION]: 'No action',
 };
 
+function readTokenColor(name: string): string {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return raw ? `hsl(${raw})` : 'currentColor';
+}
+
+function useActionColors(): Record<AgentAction, string> {
+  const resolvedTheme = useThemeStore((s) => s.resolvedTheme);
+  return useMemo(
+    () => ({
+      [AgentAction.CONVERT_TO_PREPAID]: readTokenColor('--primary'),
+      [AgentAction.CONFIRMATION_CALL]: readTokenColor('--warning'),
+      [AgentAction.NO_ACTION]: readTokenColor('--fg-subtle'),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [resolvedTheme],
+  );
+}
+
 export function ActionDonut({ decisions }: { decisions: AgentRunDecision[] }) {
+  const colors = useActionColors();
+  const surfaceColor = useMemo(() => readTokenColor('--surface-elevated'), []);
+  const borderColor = useMemo(() => readTokenColor('--border'), []);
+  const fgColor = useMemo(() => readTokenColor('--fg'), []);
+
   const counts: Record<AgentAction, number> = {
     [AgentAction.CONVERT_TO_PREPAID]: 0,
     [AgentAction.CONFIRMATION_CALL]: 0,
@@ -34,16 +53,16 @@ export function ActionDonut({ decisions }: { decisions: AgentRunDecision[] }) {
         <PieChart>
           <Pie data={data} dataKey="value" innerRadius={56} outerRadius={84} paddingAngle={2}>
             {data.map((entry) => (
-              <Cell key={entry.action} fill={COLORS[entry.action]} />
+              <Cell key={entry.action} fill={colors[entry.action]} stroke="none" />
             ))}
           </Pie>
           <Tooltip
             contentStyle={{
-              background: 'hsl(var(--surface))',
-              border: '1px solid hsl(var(--border))',
+              background: surfaceColor,
+              border: `1px solid ${borderColor}`,
               borderRadius: 12,
               fontSize: 13,
-              color: 'hsl(var(--fg))',
+              color: fgColor,
             }}
           />
         </PieChart>

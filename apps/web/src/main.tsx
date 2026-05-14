@@ -6,7 +6,7 @@ import { RouterProvider } from 'react-router-dom';
 import { router } from '@/router';
 import { queryClient } from '@/shared/api';
 import { ThemeProvider } from '@/shared/theme';
-import { Toaster } from '@/shared/ui';
+import { Toaster, TooltipProvider } from '@/shared/ui';
 
 import './styles/globals.css';
 
@@ -19,8 +19,10 @@ createRoot(rootElement).render(
   <StrictMode>
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-        <Toaster position="bottom-right" />
+        <TooltipProvider delayDuration={200}>
+          <RouterProvider router={router} />
+          <Toaster position="bottom-right" />
+        </TooltipProvider>
       </QueryClientProvider>
     </ThemeProvider>
   </StrictMode>,

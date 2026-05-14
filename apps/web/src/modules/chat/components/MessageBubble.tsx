@@ -7,22 +7,24 @@ import type { RowCitation } from '@/modules/chat/api/client';
 
 const CITE_RE = /\[cite:([\d,\s]+)\]/g;
 
-type Part = { kind: 'text'; value: string } | { kind: 'cite'; ids: number[] };
+type Part = { kind: 'text'; value: string } | { kind: 'cite'; citations: RowCitation[] };
 
-function parseText(text: string): Part[] {
+function parseText(text: string, citations: RowCitation[] | undefined): Part[] {
+  const byId = new Map<number, RowCitation>(citations?.map((c) => [c.record_id, c]) ?? []);
   const parts: Part[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   CITE_RE.lastIndex = 0;
   while ((match = CITE_RE.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push({ kind: 'text', value: text.slice(lastIndex, match.index) });
-    }
-    const ids = match[1]
+    const before = text.slice(lastIndex, match.index);
+    if (before) parts.push({ kind: 'text', value: before });
+    const resolved = match[1]
       .split(',')
       .map((s) => Number.parseInt(s.trim(), 10))
-      .filter((n) => Number.isFinite(n));
-    parts.push({ kind: 'cite', ids });
+      .filter((n) => Number.isFinite(n))
+      .map((id) => byId.get(id))
+      .filter((c): c is RowCitation => c !== undefined);
+    if (resolved.length > 0) parts.push({ kind: 'cite', citations: resolved });
     lastIndex = match.index + match[0].length;
   }
   if (lastIndex < text.length) {
@@ -32,17 +34,15 @@ function parseText(text: string): Part[] {
 }
 
 function renderAssistantText(text: string, citations: RowCitation[] | undefined) {
-  const parts = parseText(text);
-  return parts.map((part, i) => {
+  return parseText(text, citations).map((part, i) => {
     if (part.kind === 'text') {
       return <span key={i}>{part.value}</span>;
     }
     return (
       <span key={i} className="inline-flex items-baseline">
-        {part.ids.map((id) => {
-          const citation = citations?.find((c) => c.id === id);
-          return citation ? <CitationBadge key={id} citation={citation} /> : null;
-        })}
+        {part.citations.map((c) => (
+          <CitationBadge key={c.record_id} citation={c} />
+        ))}
       </span>
     );
   });
@@ -62,7 +62,7 @@ export function MessageBubble({ message }: Props) {
       className={isUser ? 'flex justify-end' : 'flex items-start gap-3'}
     >
       {!isUser && (
-        <Avatar className="h-9 w-9 shrink-0 bg-accent text-accent-fg">
+        <Avatar className="h-9 w-9 shrink-0">
           <AvatarFallback className="bg-accent text-accent-fg font-semibold">M</AvatarFallback>
         </Avatar>
       )}

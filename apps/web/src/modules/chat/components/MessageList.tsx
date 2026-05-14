@@ -22,7 +22,7 @@ interface Props {
 function TypingIndicator() {
   return (
     <div className="flex items-start gap-3">
-      <Avatar className="h-9 w-9 shrink-0 bg-accent text-accent-fg">
+      <Avatar className="h-9 w-9 shrink-0">
         <AvatarFallback className="bg-accent text-accent-fg font-semibold">M</AvatarFallback>
       </Avatar>
       <div className="rounded-2xl rounded-tl-sm bg-surface-elevated border border-border px-4 py-3 inline-flex gap-1">

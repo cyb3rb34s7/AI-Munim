@@ -22,7 +22,7 @@ export function useChat() {
           id: crypto.randomUUID(),
           role: 'assistant',
           text: data.text,
-          citations: data.available_citations,
+          citations: data.citations,
           timestamp: Date.now(),
         },
       ]);

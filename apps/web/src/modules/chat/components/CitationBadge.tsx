@@ -17,7 +17,7 @@ export function CitationBadge({ citation }: Props) {
           animate={pulse.animate}
           className="inline-flex items-center align-baseline mx-0.5 px-1.5 py-0.5 rounded-md text-[11px] font-medium bg-accent text-accent-fg hover:bg-primary hover:text-primary-fg transition-colors"
         >
-          {citation.id}
+          {citation.record_id}
         </motion.button>
       </TooltipTrigger>
       <TooltipContent>

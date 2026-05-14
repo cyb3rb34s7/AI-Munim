@@ -1,6 +1,7 @@
 import { useChat } from './hooks/useChat';
 import { MessageList } from './components/MessageList';
 import { ChatInput } from './components/ChatInput';
+import { ApiError } from '@/shared/api';
 
 export function ChatPage() {
   const { messages, send, isPending, error } = useChat();
@@ -18,7 +19,12 @@ export function ChatPage() {
         <MessageList messages={messages} isPending={isPending} onSuggest={send} />
         {error && (
           <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-            {error.message}
+            <div>{error.message}</div>
+            {error instanceof ApiError && (
+              <div className="mt-1 font-mono text-[10px] text-fg-subtle">
+                trace: {error.traceId}
+              </div>
+            )}
           </div>
         )}
       </div>

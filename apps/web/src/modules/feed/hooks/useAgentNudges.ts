@@ -2,13 +2,15 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { fetchAgentRuns, type AgentRunSummary } from '@/modules/agent_runs/api/client';
+import { fetchAgentRuns, type AgentRunSummary } from '@/modules/agent_runs';
+import { useAgentRunMetaStore } from '@/shared/store/agentRunMeta';
 
 const POLL_MS = 30_000;
 
 export function useAgentNudges() {
   const navigate = useNavigate();
   const lastSeenId = useRef<number | null>(null);
+  const lastTriggeredRunId = useAgentRunMetaStore((s) => s.lastTriggeredRunId);
 
   const query = useQuery({
     queryKey: ['agent-runs', { limit: 10 }],
@@ -21,7 +23,10 @@ export function useAgentNudges() {
     const items = query.data?.items;
     if (!items?.length) return;
     const newest = items[0];
-    if (lastSeenId.current !== null && newest.run_log_id > lastSeenId.current) {
+    const isNewToFeed =
+      lastSeenId.current !== null && newest.run_log_id > lastSeenId.current;
+    const wasUserTriggered = newest.run_log_id === lastTriggeredRunId;
+    if (isNewToFeed && !wasUserTriggered) {
       toast(
         `Agent proposed ${newest.actions_proposed} action${newest.actions_proposed === 1 ? '' : 's'}`,
         {
@@ -34,7 +39,7 @@ export function useAgentNudges() {
       );
     }
     lastSeenId.current = newest.run_log_id;
-  }, [query.data, navigate]);
+  }, [query.data, navigate, lastTriggeredRunId]);
 
   return query;
 }

@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Badge, Card, Skeleton } from '@/shared/ui';
 import { fadeUp, stagger } from '@/shared/utils/motion';
+import { ApiError } from '@/shared/api';
 import type { AgentRunSummary } from '@/modules/agent_runs/api/client';
 
 interface Props {
@@ -34,7 +35,12 @@ export function RunsTable({ runs, isLoading, error, onOpenRun }: Props) {
   if (error) {
     return (
       <Card className="p-6 text-sm text-destructive">
-        Couldn't load agent runs: {error.message}
+        <div>Couldn't load agent runs: {error.message}</div>
+        {error instanceof ApiError && (
+          <div className="mt-1 font-mono text-[10px] text-fg-subtle">
+            trace: {error.traceId}
+          </div>
+        )}
       </Card>
     );
   }
@@ -68,8 +74,17 @@ export function RunsTable({ runs, isLoading, error, onOpenRun }: Props) {
             <motion.tr
               variants={fadeUp}
               key={run.run_log_id}
+              tabIndex={0}
+              role="button"
+              aria-label={`Open agent run ${run.run_log_id}`}
               onClick={() => onOpenRun(run.run_log_id)}
-              className="cursor-pointer border-t border-border transition-colors hover:bg-surface-subtle"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onOpenRun(run.run_log_id);
+                }
+              }}
+              className="cursor-pointer border-t border-border transition-colors hover:bg-surface-subtle focus:outline-none focus:bg-surface-subtle"
             >
               <td className="px-4 py-3 font-mono text-xs text-fg-muted">
                 #{run.run_log_id}

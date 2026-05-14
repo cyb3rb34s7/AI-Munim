@@ -2,25 +2,8 @@ import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import { forwardRef, type ComponentPropsWithoutRef } from 'react';
 import { cn } from '@/shared/utils/cn';
 
-export const TooltipProvider = ({
-  delayDuration = 200,
-  children,
-  ...props
-}: ComponentPropsWithoutRef<typeof TooltipPrimitive.Provider>) => (
-  <TooltipPrimitive.Provider delayDuration={delayDuration} {...props}>
-    {children}
-  </TooltipPrimitive.Provider>
-);
-
-export const Tooltip = ({
-  children,
-  ...props
-}: ComponentPropsWithoutRef<typeof TooltipPrimitive.Root>) => (
-  <TooltipPrimitive.Root {...props}>
-    <TooltipProvider>{children}</TooltipProvider>
-  </TooltipPrimitive.Root>
-);
-
+export const TooltipProvider = TooltipPrimitive.Provider;
+export const Tooltip = TooltipPrimitive.Root;
 export const TooltipTrigger = TooltipPrimitive.Trigger;
 
 export const TooltipContent = forwardRef<

@@ -12,6 +12,8 @@ import { useAgentRun } from '@/modules/agent_runs/hooks/useAgentRun';
 import { AgentAction, type AgentRunDecision } from '@/modules/agent_runs/api/client';
 import { ActionDonut } from './ActionDonut';
 import { fadeUp, stagger } from '@/shared/utils/motion';
+import { ApiError } from '@/shared/api';
+import { inr, InvalidMoneyError } from '@/shared/utils/inr';
 
 interface Props {
   runLogId: number | null;
@@ -30,14 +32,13 @@ const ACTION_LABEL: Record<AgentAction, string> = {
   [AgentAction.NO_ACTION]: 'No action',
 };
 
-function formatINR(value: string): string {
-  const num = Number(value);
-  if (!Number.isFinite(num)) return `Rs ${value}`;
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 2,
-  }).format(num);
+function renderSavings(value: string): string {
+  try {
+    return inr(value);
+  } catch (err) {
+    if (err instanceof InvalidMoneyError) return '—';
+    throw err;
+  }
 }
 
 function DecisionRow({ decision }: { decision: AgentRunDecision }) {
@@ -60,7 +61,7 @@ function DecisionRow({ decision }: { decision: AgentRunDecision }) {
           <div className="text-right">
             <div className="text-[11px] uppercase tracking-wider text-fg-subtle">Est. saved</div>
             <div className="text-sm font-semibold text-fg">
-              {formatINR(decision.estimated_inr_saved)}
+              {renderSavings(decision.estimated_inr_saved)}
             </div>
           </div>
         )}
@@ -109,7 +110,12 @@ export function RunDetailSheet({ runLogId, onOpenChange }: Props) {
 
           {error && (
             <div className="text-sm text-destructive">
-              Couldn't load run: {error.message}
+              <div>Couldn't load run: {error.message}</div>
+              {error instanceof ApiError && (
+                <div className="mt-1 font-mono text-[10px] text-fg-subtle">
+                  trace: {error.traceId}
+                </div>
+              )}
             </div>
           )}
 
