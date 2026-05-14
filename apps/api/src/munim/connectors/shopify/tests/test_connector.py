@@ -100,11 +100,10 @@ async def test_shopify_demo_sync_full_is_idempotent(session: Session) -> None:
 
 
 async def test_shopify_validate_accepts_demo_and_defers_real_credentials() -> None:
-    # Locks the full validate contract: demo passes, real credential is
-    # explicitly deferred (NotImplementedError) — not silently treated as
-    # valid. The second half of this test catches the bug where a future
-    # change to validate() defaults to `return True` and accidentally
-    # lets unverified credentials through.
+    # Demo credentials always pass without a network call.
+    # Credentials with any other status raise NotImplementedError — not
+    # silently return True — so unverified credentials can't sneak through.
+    # (Task 7 updates this to support connected credentials via real HTTP.)
     connector = ShopifyConnector()
     assert await connector.validate(_demo_credential()) is True
 

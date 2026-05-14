@@ -93,14 +93,6 @@ class BaseConnector(ABC):
     name: ClassVar[ConnectorName]
 
     @abstractmethod
-    def authorize_url(self, merchant_id: str) -> str:
-        """OAuth URL the user is redirected to. Phase 3 wires the real flow."""
-
-    @abstractmethod
-    async def exchange_code(self, merchant_id: str, code: str) -> Credential:
-        """Trade an OAuth code for a Credential. Phase 3."""
-
-    @abstractmethod
     async def validate(self, credential: Credential) -> bool:
         """Quick credential health check."""
 

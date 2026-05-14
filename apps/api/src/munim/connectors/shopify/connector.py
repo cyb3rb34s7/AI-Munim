@@ -1,8 +1,8 @@
 """ShopifyConnector — the first concrete implementation of `BaseConnector`.
 
-Phase 2: only `validate` and `sync_full` work, and only against demo
-credentials. `authorize_url` / `exchange_code` / real-credential paths raise
-NotImplementedError and are completed in Phase 3.
+Phase 2: `validate` (demo only) + `sync_full`.
+Phase 4: `authorize_url` and `exchange_code` removed from BaseConnector ABC;
+         real credential validate + client updated in the same phase (Task 7).
 """
 
 from datetime import UTC, datetime
@@ -17,16 +17,11 @@ from munim.shared.constants import ConnectorName, CredentialStatus, EntityType
 class ShopifyConnector(BaseConnector):
     name: ClassVar[ConnectorName] = ConnectorName.SHOPIFY
 
-    def authorize_url(self, merchant_id: str) -> str:
-        raise NotImplementedError("OAuth UI lands in Phase 3. Use a demo credential for Phase 2.")
-
-    async def exchange_code(self, merchant_id: str, code: str) -> Credential:
-        raise NotImplementedError("OAuth UI lands in Phase 3. Use a demo credential for Phase 2.")
-
     async def validate(self, credential: Credential) -> bool:
-        if credential.blob.get("status") == CredentialStatus.DEMO.value:
+        status = credential.blob.get("status")
+        if status == CredentialStatus.DEMO.value:
             return True
-        raise NotImplementedError("Real Shopify credential validation lands in Phase 3.")
+        raise NotImplementedError(f"Credential status {status!r} is not handled in validate.")
 
     async def sync_full(self, ctx: SyncContext) -> SyncResult:
         started_at = datetime.now(UTC)
