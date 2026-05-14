@@ -20,6 +20,10 @@ wheels/
 *.egg
 MANIFEST
 
+# Any creds/ dir at any depth — backstop in case secrets land outside .env.
+**/creds/
+creds/
+
 # Virtual envs
 .venv/
 venv/
