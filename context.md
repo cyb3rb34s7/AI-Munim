@@ -8,11 +8,17 @@
 
 ## Now
 
-Phase 5 complete. Backend chat with full citation contract. POST /chat/messages live. 126 tests green. Frontend chat page is Phase 6.
+Phase 5 complete + review fixes + live OpenAI smoke. 135 backend tests green. Frontend chat page is Phase 6.
 - pydantic-ai 1.96.0 installed; TestModel API confirmed (custom_output_args + call_tools=[...]).
 - ToolReturnPart.content holds the raw Python return value — citation walk confirmed empirically.
-- Enforcer regex: currency (₹/Rs./\$) + percent (%) + count+entity_noun + comma-thousands. Does NOT flag: dates (hyphen-separated), long bare IDs, pincodes (no comma/noun/currency). _PROXIMITY_CHARS=64.
-- All 7 tasks committed. 126/126 green. ruff + mypy clean.
+- Enforcer regex (post-review): currency (₹/Rs./$) + percent + count+entity_noun + comma-thousands + Indian shortform (lakh/crore/cr). All branches allow optional leading minus ([-−]?) so stripped negatives don't leave a hanging sign. Currency uses strict \d{1,3}(?:,\d{3})* so sentence commas are preserved. used_citations cross-check now enforced. _PROXIMITY_CHARS=64.
+- Reviewer surfaced 8 Important findings; all applied: greedy currency comma → strict, Unicode minus consumed, Indian-format branch, used_citations validation, _row_to_citation no-fallback, MetricFormula StrEnum, magic-string-in-test, structured logging + trace_id in run_log, narrow except in agent.
+- **Live smoke (2026-05-14, real OpenAI gpt-4o-mini, real Shopify data):**
+  - Q: "How many orders do I have, and what is the total revenue?"
+  - A: "You have 3 orders[cite:1,2,3] with a total revenue of Rs.44.97[cite:1,2,3]." (math: 13.07 + 23.00 + 8.90 = 44.97 ✓)
+  - Q: "Show me my orders shipping to Bengaluru pincode 560001."
+  - A: "You have 1 order[cite:3] shipping to Bengaluru (pincode 560001) worth Rs.13.07[cite:3]." (pincode preserved as categorical, count + currency both cited)
+- Final state: 135/135 tests, ruff + mypy clean, frontend untouched.
 
 ---
 
@@ -25,7 +31,7 @@ Phase 5 complete. Backend chat with full citation contract. POST /chat/messages 
 - 2026-05-13 — **Phase 2 complete.** Universal 4-table schema (`merchant`, `connector_credentials`, `record`, `run_log`), `Order` Pydantic (canonical normalized shape), `BaseConnector` ABC + `RowSink` writer, `ShopifyConnector` demo sync end-to-end. Reviewer subagent surfaced 1 critical + 4 important findings (all time-handling + extra=forbid + magic string); all applied. 36 tests, all green. See `CHANGELOG.md` 2026-05-13 Phase 2 entry for details.
 - 2026-05-14 — **Phase 3 complete.** Connectors + Records API, AppShell + nav, two new frontend modules. End-to-end demo working at `/connectors` and `/records`. Reviewer subagent surfaced 2 Important findings (ConnectorSyncError dead code + duplicated records query key); all applied + tests added. Live browser smoke (agent-browser) walked all 8 steps of the recipe — pass.
 - 2026-05-14 — **Phase 4 complete.** Real OAuth + Admin API for Shopify. Reviewer surfaced 3 Important findings (typed decrypt error, shop-domain defense-in-depth, body truncation); all applied. 95 backend tests green. Live smoke against real Shopify dev store walked Connect → Sync → Records drawer with real Admin API data.
-- 2026-05-14 — **Phase 5 complete.** Chat backend + citation contract, the scored axis of the brief. 126 backend tests green. POST /chat/messages live.
+- 2026-05-14 — **Phase 5 complete.** Chat backend + citation contract, the scored axis of the brief. Reviewer surfaced 8 Important findings (regex greedy comma, Unicode minus, Indian-format, used_citations cross-check, silent fallback in _row_to_citation, magic strings, observability gaps, broad except); all applied. 135 backend tests green. Live smoke against real OpenAI gpt-4o-mini + real Shopify data: chat produces grounded answers with cite markers, math correct, pincode preserved, trace_id propagated.
 
 ---
 
@@ -44,6 +50,16 @@ Ranking re-evaluated at the start of each new phase.
 ## Problems & solutions
 
 Every entry is a paid lesson. Read at the start of every session. Never repeat one.
+
+### 2026-05-14 (Phase 5 live smoke) — pydantic-settings does not propagate values to os.environ; downstream SDKs that read os.environ directly fail
+
+**Problem:** `OPENAI_API_KEY` was in `apps/api/.env` and Pydantic Settings loaded it into `settings.openai_api_key` correctly. But the first chat request returned `system.unexpected` with the trace showing `openai.OpenAIError: Missing credentials. Please pass an api_key, ... or set the OPENAI_API_KEY environment variable.`
+
+**Root cause:** Pydantic Settings reads `.env` into the Settings instance but does NOT mirror the values into `os.environ`. PydanticAI's OpenAI provider constructs `AsyncOpenAI()` with no explicit `api_key` arg, and `AsyncOpenAI` reads `os.environ["OPENAI_API_KEY"]` directly. Since uvicorn was launched without `OPENAI_API_KEY` exported in the shell, the SDK never saw the value.
+
+**Solution:** In `main.py`'s `lifespan`, after loading settings, set `os.environ["OPENAI_API_KEY"] = settings.openai_api_key`. Two lines. Bridges the Pydantic Settings ↔ third-party SDK gap. Documented inline.
+
+**Guardrail:** Any external SDK that reads env vars directly (OpenAI, Anthropic, AWS, etc.) needs an os.environ bridge from Settings at startup. The cleaner alternative is constructing the SDK explicitly with `api_key=settings.api_key`, which we'll do once we have a provider abstraction layer. For now the env bridge is the smaller fix.
 
 ### 2026-05-14 (Phase 5) — pydantic-ai 1.96.0 TestModel calls ALL tools by default, breaking agent tests
 
