@@ -9,7 +9,9 @@ interface ConnectorsGridProps {
   error: Error | null;
   connectingName: ConnectorName | null;
   syncingName: ConnectorName | null;
+  startingOAuthName: ConnectorName | null;
   onConnect: (name: ConnectorName) => void;
+  onConnectReal: (name: ConnectorName) => void;
   onSync: (name: ConnectorName) => void;
 }
 
@@ -19,7 +21,9 @@ export function ConnectorsGrid({
   error,
   connectingName,
   syncingName,
+  startingOAuthName,
   onConnect,
+  onConnectReal,
   onSync,
 }: ConnectorsGridProps) {
   if (isLoading) return <Loader label="Loading connectors…" />;
@@ -41,7 +45,9 @@ export function ConnectorsGrid({
           view={view}
           connecting={connectingName === view.name}
           syncing={syncingName === view.name}
+          startingOAuth={startingOAuthName === view.name}
           onConnect={onConnect}
+          onConnectReal={onConnectReal}
           onSync={onSync}
         />
       ))}

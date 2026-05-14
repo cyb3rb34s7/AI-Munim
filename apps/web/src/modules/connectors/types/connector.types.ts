@@ -47,3 +47,9 @@ export type ConnectorView = z.infer<typeof connectorViewSchema>;
 export type ConnectorListResponse = z.infer<typeof connectorListResponseSchema>;
 export type ConnectResponse = z.infer<typeof connectResponseSchema>;
 export type SyncResponse = z.infer<typeof syncResponseSchema>;
+
+export const startOAuthResponseSchema = z.object({
+  authorize_url: z.string().url(),
+});
+
+export type StartOAuthResponse = z.infer<typeof startOAuthResponseSchema>;

@@ -6,7 +6,9 @@ interface ConnectorCardProps {
   view: ConnectorView;
   connecting: boolean;
   syncing: boolean;
+  startingOAuth: boolean;
   onConnect: (name: ConnectorName) => void;
+  onConnectReal: (name: ConnectorName) => void;
   onSync: (name: ConnectorName) => void;
 }
 
@@ -26,7 +28,9 @@ export function ConnectorCard({
   view,
   connecting,
   syncing,
+  startingOAuth,
   onConnect,
+  onConnectReal,
   onSync,
 }: ConnectorCardProps) {
   const isConnected = view.status !== null;
@@ -52,9 +56,18 @@ export function ConnectorCard({
         </dl>
         <div className="flex gap-2">
           {!isConnected && (
-            <Button onClick={() => onConnect(view.name as ConnectorName)} loading={connecting}>
-              Connect (demo)
-            </Button>
+            <>
+              <Button onClick={() => onConnect(view.name as ConnectorName)} loading={connecting}>
+                Connect (demo)
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => onConnectReal(view.name as ConnectorName)}
+                loading={startingOAuth}
+              >
+                Connect to your store
+              </Button>
+            </>
           )}
           {isConnected && (
             <Button
