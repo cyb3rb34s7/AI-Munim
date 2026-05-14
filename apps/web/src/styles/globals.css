@@ -1,65 +1,105 @@
 @import 'tailwindcss';
-
-/*
- * Theme tokens.
- *
- * CSS variables on :root and .dark drive every color used by Tailwind utilities.
- * The `@theme inline` block tells Tailwind to resolve color utilities via these
- * variables at runtime, so a `bg-bg` class automatically swaps between light and
- * dark when the `.dark` class is toggled on <html>.
- *
- * Adding a new color: define `--<name>` on :root + .dark, then expose it as
- * `--color-<name>` inside `@theme inline`. Use the resulting utility class
- * (`bg-<name>`, `text-<name>`, `border-<name>`) across the app.
- */
+@import 'tw-animate-css';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --bg: 0 0% 100%;
-  --bg-subtle: 220 14% 96%;
-  --fg: 222 47% 11%;
-  --muted: 215 16% 47%;
-  --border: 220 13% 91%;
-  --primary: 222 47% 11%;
+  --bg: 270 30% 99%;
+  --surface: 0 0% 100%;
+  --surface-elevated: 270 25% 98%;
+  --surface-subtle: 270 20% 96%;
+  --sidebar-bg: 263 35% 8%;
+  --sidebar-fg: 270 20% 92%;
+  --sidebar-muted: 270 10% 62%;
+  --sidebar-hover: 263 30% 14%;
+
+  --fg: 263 25% 13%;
+  --fg-muted: 263 10% 42%;
+  --fg-subtle: 263 8% 58%;
+
+  --border: 270 20% 92%;
+  --border-strong: 270 18% 86%;
+  --ring: 263 70% 60%;
+
+  --primary: 263 70% 60%;
   --primary-fg: 0 0% 100%;
-  --accent: 217 91% 60%;
-  --success: 142 76% 36%;
+  --primary-hover: 263 70% 54%;
+  --accent: 263 70% 95%;
+  --accent-fg: 263 70% 30%;
+
+  --success: 152 55% 42%;
   --warning: 38 92% 50%;
-  --error: 0 84% 60%;
+  --destructive: 0 70% 56%;
+  --pop: 14 90% 66%;
 }
 
 .dark {
-  --bg: 222 47% 8%;
-  --bg-subtle: 217 33% 12%;
-  --fg: 210 40% 98%;
-  --muted: 215 16% 65%;
-  --border: 217 33% 18%;
-  --primary: 210 40% 98%;
-  --primary-fg: 222 47% 11%;
-  --accent: 217 91% 70%;
-  --success: 142 70% 45%;
-  --warning: 38 92% 55%;
-  --error: 0 84% 65%;
+  --bg: 263 28% 6%;
+  --surface: 263 22% 9%;
+  --surface-elevated: 263 22% 12%;
+  --surface-subtle: 263 18% 11%;
+  --sidebar-bg: 263 35% 5%;
+  --sidebar-fg: 270 18% 92%;
+  --sidebar-muted: 270 12% 60%;
+  --sidebar-hover: 263 30% 12%;
+
+  --fg: 270 18% 95%;
+  --fg-muted: 270 10% 65%;
+  --fg-subtle: 270 8% 50%;
+
+  --border: 263 18% 18%;
+  --border-strong: 263 18% 24%;
+  --ring: 263 80% 72%;
+
+  --primary: 263 80% 70%;
+  --primary-fg: 263 30% 10%;
+  --primary-hover: 263 80% 74%;
+  --accent: 263 50% 20%;
+  --accent-fg: 263 90% 92%;
+
+  --success: 152 60% 55%;
+  --warning: 38 92% 60%;
+  --destructive: 0 72% 65%;
+  --pop: 14 92% 72%;
 }
 
 @theme inline {
   --color-bg: hsl(var(--bg));
-  --color-bg-subtle: hsl(var(--bg-subtle));
+  --color-surface: hsl(var(--surface));
+  --color-surface-elevated: hsl(var(--surface-elevated));
+  --color-surface-subtle: hsl(var(--surface-subtle));
+  --color-sidebar-bg: hsl(var(--sidebar-bg));
+  --color-sidebar-fg: hsl(var(--sidebar-fg));
+  --color-sidebar-muted: hsl(var(--sidebar-muted));
+  --color-sidebar-hover: hsl(var(--sidebar-hover));
+
   --color-fg: hsl(var(--fg));
-  --color-muted: hsl(var(--muted));
+  --color-fg-muted: hsl(var(--fg-muted));
+  --color-fg-subtle: hsl(var(--fg-subtle));
+
   --color-border: hsl(var(--border));
+  --color-border-strong: hsl(var(--border-strong));
+  --color-ring: hsl(var(--ring));
+
   --color-primary: hsl(var(--primary));
   --color-primary-fg: hsl(var(--primary-fg));
+  --color-primary-hover: hsl(var(--primary-hover));
   --color-accent: hsl(var(--accent));
+  --color-accent-fg: hsl(var(--accent-fg));
+
   --color-success: hsl(var(--success));
   --color-warning: hsl(var(--warning));
-  --color-error: hsl(var(--error));
+  --color-destructive: hsl(var(--destructive));
+  --color-pop: hsl(var(--pop));
 
-  --radius-sm: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.75rem;
+  --color-bg-subtle: hsl(var(--surface-subtle));
+  --color-muted: hsl(var(--fg-muted));
+  --color-error: hsl(var(--destructive));
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
 
   --font-sans:
     'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
@@ -82,5 +122,8 @@
   body {
     @apply bg-bg text-fg font-sans antialiased;
     min-height: 100vh;
+  }
+  *:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-bg;
   }
 }
