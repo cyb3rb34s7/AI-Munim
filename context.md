@@ -8,12 +8,12 @@
 
 ## Now
 
-Phase 4 complete. Real Shopify OAuth + Admin API working end-to-end against a live dev store. Demo flow preserved. 92 backend tests green.
-- Backend: ruff + format + mypy + pytest — all pass (92/92).
-- New: `shared/crypto.py` (AES-GCM, HMAC-signed state, Shopify HMAC verify), `modules/connectors/oauth_shopify.py` (authorize URL + code exchange), OAuth endpoints (`/oauth/init`, `/oauth/callback`), real `ShopifyClient` (auth header, pagination, 429 retry + `validate_credential`).
-- Frontend: "Connect to your store" button on Shopify card, `ShopOAuthModal` (shop subdomain input), success banner on `?connected=shopify` redirect.
-- Refactor: `BaseConnector` ABC dropped `authorize_url`/`exchange_code` (Liskov reason).
-- **Smoke (automated, 2026-05-14):** `/connectors/shopify/oauth/init` POST returns valid authorize_url pointing to `munim-dev.myshopify.com`. Browser-driven OAuth round-trip (complete Shopify auth → redirect back → Sync) requires user session — hand off to controller.
+Phase 4 complete + review-cycle fixes + live smoke against real Shopify. 95 backend tests green.
+- Backend: ruff + format + mypy + pytest — all pass (95/95).
+- Reviewer (Phase 4) caught 3 Important findings — decrypt failure surfacing as system.unexpected (typed wrap added), shop-domain validation missing at read time (defense-in-depth added), OAuthExchangeError body truncation. All fixed, all tested.
+- **Live smoke (2026-05-14, real Shopify dev store):** Connect (real) → Shopify OAuth → callback → encrypted access token persisted → click Sync → `3 upserted, 0 skipped` → Records page shows 3 real orders → drawer shows the raw Shopify Admin API payload (admin_graphql_api_id, app_id, billing_address, browser_ip, cart_token, ...) byte-equal alongside the normalized Order. Idempotency confirmed: second sync → `0 upserted, 3 skipped`. UTC normalization confirmed: `placed_at: "2026-05-14T15:33:40Z"` next to raw `+05:30` offset.
+- Test orders seeded via Shopify CLI's `store execute` GraphQL `draftOrderCreate` + `draftOrderComplete` (orderCreate is offline-token-only; draftOrder works with online CLI tokens).
+- Real Shopify Admin API call observed: `GET /admin/api/2026-04/orders.json` → 200 OK with X-Shopify-Access-Token; pagination + 429 retry paths in place but not yet exercised live.
 
 ---
 
@@ -25,7 +25,7 @@ Phase 4 complete. Real Shopify OAuth + Admin API working end-to-end against a li
 - 2026-05-13 — **Phase 1 complete.** Monorepo skeleton, backend foundations (config, logging, trace, errors, responses, db, constants), `/health` module with 6 tests, frontend scaffold (Vite + React 19 + Tailwind v4 + theme), shared API client (ky + Zod envelope unwrap), Zustand theme store, TanStack Query client, dumb `HealthCard` + connector `HealthSection`. Dev infra: pre-commit, GitHub Actions CI, `docker-compose.yml`. End-to-end live-verified. See `CHANGELOG.md` 2026-05-13 entry for details.
 - 2026-05-13 — **Phase 2 complete.** Universal 4-table schema (`merchant`, `connector_credentials`, `record`, `run_log`), `Order` Pydantic (canonical normalized shape), `BaseConnector` ABC + `RowSink` writer, `ShopifyConnector` demo sync end-to-end. Reviewer subagent surfaced 1 critical + 4 important findings (all time-handling + extra=forbid + magic string); all applied. 36 tests, all green. See `CHANGELOG.md` 2026-05-13 Phase 2 entry for details.
 - 2026-05-14 — **Phase 3 complete.** Connectors + Records API, AppShell + nav, two new frontend modules. End-to-end demo working at `/connectors` and `/records`. Reviewer subagent surfaced 2 Important findings (ConnectorSyncError dead code + duplicated records query key); all applied + tests added. Live browser smoke (agent-browser) walked all 8 steps of the recipe — pass.
-- 2026-05-14 — **Phase 4 complete.** Real OAuth + Admin API for Shopify. 92 backend tests green, frontend typecheck + lint + build green.
+- 2026-05-14 — **Phase 4 complete.** Real OAuth + Admin API for Shopify. Reviewer surfaced 3 Important findings (typed decrypt error, shop-domain defense-in-depth, body truncation); all applied. 95 backend tests green. Live smoke against real Shopify dev store walked Connect → Sync → Records drawer with real Admin API data.
 
 ---
 
@@ -45,6 +45,44 @@ Ranking re-evaluated at the start of each new phase.
 ## Problems & solutions
 
 Every entry is a paid lesson. Read at the start of every session. Never repeat one.
+
+### 2026-05-14 (Phase 4 live smoke) — Shopify "Protected Customer Data" gate is separate from OAuth scopes
+
+**Problem:** After completing OAuth and getting a token with `read_orders, read_customers, read_products, read_inventory` scopes, the first sync hit `GET /admin/api/2026-04/orders.json` → **403 Forbidden** with body: `"This app is not approved to access REST endpoints with protected customer data."` All four scopes were on the token; sync still failed.
+
+**Root cause:** Shopify introduced "Protected Customer Data" gating in API 2024-04+ as a SEPARATE consent surface on top of OAuth scopes. Any endpoint that returns customer-bearing data (orders.json, customers.json) requires the app to declare which protected fields it needs (name, email, phone, address) under "Customer data access" in the Partner Dashboard. Without that declaration, `read_orders` alone is insufficient. For App Store review, declarations need approval; for dev stores, self-declaration is auto-granted.
+
+**Solution:** In Partner Dashboard → AI-Munim → Versions → "Protected customer data access": check Store management + Analytics + App functionality as data-use reasons, then select Name + Email + Phone + Address under "Protected customer fields (optional)". Save + release new version + uninstall the app from the dev store + reinstall (Shopify binds protected-data permission at install time; existing tokens can't be upgraded in place).
+
+**Guardrail:** Any future Shopify integration must declare protected customer data access at the same time as scope configuration. Document in README that reviewers need to walk this step. If we ever go multi-store, add a sanity check in `validate_credential` that hits `/orders.json?limit=1` (not just `/shop.json`) so a 403 here surfaces at install time rather than first sync.
+
+### 2026-05-14 (Phase 4 live smoke) — `/api` prefix is a Vite dev-proxy convention, NOT a backend route prefix
+
+**Problem:** Set `SHOPIFY_OAUTH_REDIRECT_URI=http://localhost:8000/api/connectors/shopify/oauth/callback` in the Phase 4 plan and `.env`. Shopify dutifully called that URL during the OAuth callback. Our backend serves connectors at plain `/connectors/...` — got a 404 envelope back instead of completing the OAuth handshake.
+
+**Root cause:** The `/api/` prefix lives in two places in our setup: (1) frontend ky client prepends it to every request, (2) Vite dev proxy strips it before forwarding to localhost:8000. So `/api` is only a frontend ↔ proxy convention; the backend has never seen it. Easy to misread the prefix as a backend route prefix when both ends of the dev pipeline talk about `/api`.
+
+**Solution:** Changed `SHOPIFY_OAUTH_REDIRECT_URI` to `http://localhost:8000/connectors/shopify/oauth/callback` (no /api) + matching update in the Partner App's "Allowed redirection URLs". Updated `.env.example`'s line with an explanatory comment.
+
+**Guardrail:** Any URL that Shopify (or any external service) hits MUST be the real backend URL — never the Vite-proxied one. The mental model: `/api/*` exists only inside the frontend bundle and Vite's proxy; the moment a third party hits our backend, it's at bare paths. Add to README's deployment notes when we write it.
+
+### 2026-05-14 (Phase 4 live smoke) — Shopify CLI `store auth` issues online tokens; orderCreate requires offline
+
+**Problem:** Trying to seed test orders via `shopify store execute --query 'mutation { orderCreate(...) }'` returned: `"Access denied for orderCreate field. Required access: write_orders access scope. Also: This mutation is only accessible to apps authenticated using offline tokens."` We had write_orders on the CLI auth.
+
+**Root cause:** Shopify has two token types — online (per-user session, expires when user logs out) and offline (long-lived, app-level). `shopify store auth` issues ONLINE tokens. `orderCreate` (the import-orders mutation) is gated to offline tokens because it's meant for app-side data import, not interactive user actions. Our own app's OAuth flow produces offline tokens — but we only requested read scopes, so it can't write either.
+
+**Solution:** Switched to `draftOrderCreate` + `draftOrderComplete(paymentPending: true|false)` — draft order mutations accept online tokens. `paymentPending: true` produces a PENDING order (COD-equivalent), `false` produces PAID. Three test orders created via two CLI calls each.
+
+**Guardrail:** When seeding test data via the CLI, prefer `draftOrderCreate` over `orderCreate`. If we ever need to programmatically create orders from our backend (e.g., for an auto-reordering agent), add `write_orders` to our app's scopes and the offline token is already what we have.
+
+### 2026-05-14 (Phase 4 live smoke) — Shopify rejects `.in` email domain on order create
+
+**Problem:** First `draftOrderCreate` failed with `userErrors: [{"field": ["email"], "message": "Email contains an invalid domain name"}]` for `aarav@example.in`.
+
+**Root cause:** Shopify maintains an "invalid email domain" list — `example.in` is on it (likely because the .in TLD is reserved for India and `example.*` domains are reserved for documentation). `example.com` is on the allowlist.
+
+**Guardrail:** Test fixtures and seed scripts use `@example.com`. If we need geographically realistic emails in test data, use real-looking domains (`@gmail.com`, `@outlook.in` would work).
 
 ### 2026-05-14 (Phase 4) — mypy reports "Missing named argument" for Pydantic Settings required fields
 

@@ -93,3 +93,5 @@ pnpm-debug.log*
 .cache/
 tmp/
 .tmp/
+.tmp-*/
+.tmp/
