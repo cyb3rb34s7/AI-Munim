@@ -19,6 +19,30 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-15 — Phase 7 review fixes
+
+**What changed:** Reviewer subagent surfaced 4 CRITICAL + 9 IMPORTANT findings; all addressed.
+
+- **Chat was broken end-to-end** — the Phase 7 plan had the wrong contract baked into its code blocks (request body `prompt` instead of `message`; response shape `used_citations`/`available_citations`/`id` instead of `citations`/`record_id`). Implementer copied it faithfully. Backend never changed. Fixed `apps/web/src/modules/chat/api/client.ts` Zod schemas to match the actual backend `ChatMessageRequest`/`ChatMessageResponse` (Phase 5). Propagated rename through `useChat`, `MessageBubble` (citation lookup by `record_id`), `CitationBadge` (render `record_id`).
+- **Tooltip Provider** was nested INSIDE `Tooltip.Root` instead of being an ancestor — every citation badge tooltip silently failed. Hoisted `TooltipProvider` to `main.tsx` ancestor; simplified `Tooltip` export to `TooltipPrimitive.Root`.
+- **ActionDonut** had three hardcoded light-mode HSL strings (`hsl(263 70% 60%)` etc.), so the chart rendered with wrong colors in dark mode. Now reads CSS custom properties at render time and re-keys off `useThemeStore.resolvedTheme`.
+- **trace_id never surfaced in error UI** — added `error.traceId` rendering to ChatPage, RunsTable, RunDetailSheet, useTriggerAgent toast. Now any "the chat failed" report carries the grep-able trace id.
+- **Citation parser dropped empty inline-flex spans** for hallucinated ids — fixed parser to filter cite-token ids by whether they exist in the response citations and skip the entire token when none resolve.
+- **Double toast on manual trigger** — added `useAgentRunMetaStore` (Zustand) so `useAgentNudges` skips its toast when newest run_log_id === the id `useTriggerAgent` just wrote. Single toast on the demo's headline interaction.
+- **Inline `formatINR` with silent fallback** — extracted to `shared/utils/inr.ts` that throws `InvalidMoneyError` on non-finite; `RunDetailSheet` boundary renders `—` on catch.
+- **Magic string `'rto_mitigator'`** — added `shared/constants/agents.ts` with `AgentName` `as const`; mirrors the backend StrEnum.
+- **Module index.ts** added for chat, agent_runs, feed (§3.2 public surface).
+- **Row click keyboard-accessible** — RunsTable rows now have `tabIndex={0}`, `role="button"`, `onKeyDown` for Enter/Space.
+- **Avatar double-styling** removed from `MessageBubble` + `MessageList` (Fallback owns the bg-accent; root just sizes).
+
+**Deferred (NIT, documented in context.md):** ErrorBoundary at root; recharts/sonner major-version bump notation; `fmtIST()` helper (timestamps still use browser locale); bundle code-split for Recharts; connectors page polish.
+
+**Live API smoke (chat contract):** `POST /chat/messages` with `{ message: "How many orders do I have total?" }` returned `{ text: "You have a total of 4 orders[cite:4,3,2,1].", citations: [4 records] }` matching the new Zod schema exactly. trace_id propagated.
+
+**Reverts cleanly?:** yes — single fix commit on top of Phase 7.
+
+---
+
 ## 2026-05-15 — Phase 7 frontend shell + chat + agent runs
 
 **What changed:** Shipped the frontend for the two scored axes of the brief plus the polished shell that contains them.

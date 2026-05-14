@@ -8,14 +8,7 @@
 
 ## Now
 
-Phase 7 frontend implementation complete (coder subagent). Awaiting reviewer + manual smoke. Shipped:
-- App shell (Sidebar + Main + FeedPanel) with lavender token system, light + dark.
-- `/chat` with citation badges (parsed from `[cite:N]` markers, hover Tooltip on each).
-- `/agents` with table, ?run=<id> detail sheet, action distribution donut, manual TriggerAgentButton.
-- FeedPanel with `useAgentNudges` polling `GET /agent-runs?limit=10` every 30s, Sonner toast on new arrivals.
-- Connectors + Records inherit the new shell; light migration: new tokens + fadeUp wrapper, no logic changes.
-- `pnpm typecheck`, `pnpm lint`, `pnpm build` all green.
-- Backend untouched.
+Phase 7 complete (frontend + review cycle). Reviewer surfaced 4 CRITICAL + 9 IMPORTANT findings; all fixed in one commit. Chat was broken end-to-end (plan-bug: wrong contract baked into the plan's code blocks), Tooltips silently failed (Provider nesting), donut used hardcoded light-mode HSL, trace_id missing from error UI, double toast on manual trigger. Backend untouched. `pnpm typecheck`, `pnpm lint`, `pnpm build` all green. Live API smoke confirmed the new chat Zod schema parses the real backend response cleanly. Awaiting user manual browser smoke.
 
 Phase 6 (the previous Now): 168 backend tests green. RTO Risk Mitigator agent live, manually triggerable via `POST /agents/rto_mitigator/run`, full decision list (signals + weights + reasoning) persisted to `run_log` per run. Zero outbound HTTP calls — locked at the test level. Live smoke verified: a seeded ₹6000 high-pincode-risk late-night COD order scores 0.618 → `convert_to_prepaid`, est. ₹2595.60 saved.
 
@@ -38,7 +31,7 @@ Phase 6 (the previous Now): 168 backend tests green. RTO Risk Mitigator agent li
 - 2026-05-14 — **Phase 4 complete.** Real OAuth + Admin API for Shopify. Reviewer surfaced 3 Important findings (typed decrypt error, shop-domain defense-in-depth, body truncation); all applied. 95 backend tests green. Live smoke against real Shopify dev store walked Connect → Sync → Records drawer with real Admin API data.
 - 2026-05-14 — **Phase 5 complete.** Chat backend + citation contract, the scored axis of the brief. Reviewer surfaced 8 Important findings (regex greedy comma, Unicode minus, Indian-format, used_citations cross-check, silent fallback in _row_to_citation, magic strings, observability gaps, broad except); all applied. 135 backend tests green. Live smoke against real OpenAI gpt-4o-mini + real Shopify data: chat produces grounded answers with cite markers, math correct, pincode preserved, trace_id propagated.
 - 2026-05-14 — **Phase 6 complete (backend + review cycle).** RTO Risk Mitigator agent. Deterministic signal extractors + weighted scoring + threshold tree, one `RunLog` row per run with the full decision list, `POST /agents/rto_mitigator/run` + `GET /agent-runs` endpoints. `respx.mock` test locks zero outbound HTTP (httpx specifically). Reviewer surfaced 3 CRITICAL + 9 IMPORTANT findings (timezone bug, magic strings, dead error code, float in money, silent fallback, asserts as contracts, etc.); all fixed in one commit. 168 backend tests green. Live smoke shows convert_to_prepaid with ₹2595.60 estimated saved on seeded high-risk COD.
-- 2026-05-15 — **Phase 7 implementation complete (coder).** App shell with lavender token system + Sidebar + Main + FeedPanel (right-column agent-nudge feed). Chat page with citation badges + avatar persona; Agent Runs page with detail sheet + action donut + manual trigger; FeedPanel with polling + Sonner toast on new arrivals. shadcn-style UI primitives on Radix headless (Button/Card/Sheet/Tooltip/Badge/Avatar/Skeleton/Toaster/ScrollArea/Separator). Connectors + Records light migration: new tokens + fadeUp wrapper, no logic changes. Awaiting reviewer cycle + user manual smoke. See `CHANGELOG.md` 2026-05-15 entry for files touched.
+- 2026-05-15 — **Phase 7 complete (frontend + review cycle).** App shell with lavender token system + Sidebar + Main + FeedPanel (right-column agent-nudge feed). Chat page with citation badges + avatar persona; Agent Runs page with detail sheet + action donut + manual trigger; FeedPanel with polling + Sonner toast on new arrivals. shadcn-style UI primitives on Radix headless. Reviewer surfaced 4 CRITICAL (chat contract drift, Tooltip Provider nesting, donut hardcoded HSL, missing trace_id in errors) + 9 IMPORTANT (double toast, silent INR fallback, magic strings, citation parser hallucination handling, row a11y, etc.); all addressed in one fix commit. Live API smoke confirms the chat endpoint now matches the frontend Zod contract. Connectors + Records light migration: new tokens + fadeUp wrapper, no logic changes.
 
 ---
 
@@ -55,6 +48,34 @@ Ranking re-evaluated at the start of each new phase.
 ## Problems & solutions
 
 Every entry is a paid lesson. Read at the start of every session. Never repeat one.
+
+### 2026-05-15 (Phase 7 review) — copying API contracts from a plan instead of re-reading the actual backend ships broken code that lints + typechecks + builds clean
+
+**Problem:** The Phase 7 plan I (planner) wrote had the wrong frontend Zod schema for the chat endpoint baked into its code blocks: request body `{ prompt }` instead of `{ message }`; response shape `{ text, used_citations, available_citations }` with `id` on each citation, instead of the actual `{ text, citations }` with `record_id`. The implementer subagent copied the plan verbatim. Build was green, lint was green, typecheck was green. The boundary validator would have thrown `ContractMismatchError` on every chat call — but no live smoke ran during implementation, so it landed undiscovered until the reviewer caught it by reading the backend's `apps/api/src/munim/modules/chat/schemas.py` and comparing.
+
+**Root cause:** The plan's code blocks were written from my memory of an older draft of the chat API contract, not from a Read against the actual backend schemas. The implementer's job is to follow the plan; the plan's job is to be correct. It wasn't.
+
+**Solution:** Rewrote `apps/web/src/modules/chat/api/client.ts` Zod schemas to match `ChatMessageRequest`/`ChatMessageResponse` exactly; propagated the rename through `useChat`, `MessageBubble`, `CitationBadge`. Verified end-to-end with a live curl.
+
+**Guardrail:** When a plan declares an API contract on the frontend side, the planner MUST Read the actual backend schema file in the same session and quote the field names. "Code blocks describing the wire contract" is a category of plan content that needs verification before dispatch, not after. Add this to the writing-plans checklist: any API client Zod schema must reference the backend Pydantic schema file path, and the planner verifies they match before the plan ships.
+
+Also: live API smoke (curl against the running backend) should be a mandatory step in the implementer's plan whenever the frontend touches a new endpoint. If a `pnpm build` green build wasn't enough to catch this, only a smoke would have.
+
+### 2026-05-15 (Phase 7 review) — Radix `TooltipProvider` must be an ancestor of `Tooltip.Root`, never a child; nesting it inside silently breaks every tooltip
+
+**Problem:** `apps/web/src/shared/ui/tooltip.tsx` had `<Tooltip>` exported as `<Root><Provider>{children}</Provider></Root>`. Radix requires `Provider` to wrap `Root`, not the other way around. Build was green (it's a runtime contract, not a TypeScript one); all citation badges silently failed to show tooltips, but only at runtime — none of the static gates catch it.
+
+**Solution:** Hoisted `<TooltipProvider delayDuration={200}>` to `main.tsx`, wrapping the `RouterProvider`. Simplified `Tooltip` export to just `TooltipPrimitive.Root`.
+
+**Guardrail:** Any Radix primitive that requires a Provider/Root pairing should have that documented in the component file's exports (e.g. a comment on the export or a check in the file). When adapting shadcn components manually (we deliberately chose this over the CLI), the Provider hoisting is exactly the kind of detail to get wrong. Default rule: for any Radix primitive in `shared/ui`, mount the Provider at `main.tsx`. Document this in `docs/conventions.md §15+`.
+
+### 2026-05-15 (Phase 7 review) — Recharts `Cell.fill` taking a token name doesn't work; you must read the CSS variable at render time
+
+**Problem:** `ActionDonut.tsx` had `COLORS: Record<AgentAction, string> = { CONVERT_TO_PREPAID: 'hsl(263 70% 60%)' }` — a literal HSL string, the light-mode value of `--primary`. Dark mode rendered with the wrong color. Recharts `<Cell>` takes a `fill` prop as a CSS color string, not a CSS variable or class — the SVG attribute is resolved once at render, not subscribed to `.dark` class on `<html>`.
+
+**Solution:** Read `getComputedStyle(document.documentElement).getPropertyValue('--primary')` at render time, wrap in `hsl(...)`, key the `useMemo` off `useThemeStore.resolvedTheme` so the colors re-read when the theme switches. The `eslint-disable-next-line react-hooks/exhaustive-deps` is intentional — the dependency exists to trigger re-computation, not to be consumed.
+
+**Guardrail:** Recharts (and any SVG-native chart library) is a tokens-system blind spot. Any chart Cell/Bar/Line color must come from a `getComputedStyle` read keyed off `resolvedTheme`, not from a static literal. Pattern: extract a `useTokenColor(name)` hook into `shared/utils/tokens.ts` (or similar) the second time we need it.
 
 ### 2026-05-14 (Phase 6 review) — read `.hour` on a wire-format UTC datetime gives wrong band for IST-local decisions
 
