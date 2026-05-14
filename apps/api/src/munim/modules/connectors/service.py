@@ -3,6 +3,9 @@ calls the registry + RowSink + connectors.base.
 
 Demo credential blob shape:
     {"status": "demo", "fixture_path": "<absolute path to orders.json>"}.
+Real credential blob shape (Phase 4):
+    {"status": "connected", "shop": "<shop>", "access_token": "<token>", "scopes": [...]}.
+    Stored AES-GCM-encrypted in auth_blob_encrypted; decrypted on read.
 """
 
 import json
@@ -18,16 +21,30 @@ from munim.connectors._row_sink import RowSink
 from munim.connectors.base import Credential, SyncContext
 from munim.connectors.registry import ConnectorRegistry
 from munim.models import ConnectorCredentials, Record
+from munim.modules.connectors.oauth_shopify import (
+    build_shopify_authorize_url,
+    exchange_shopify_code,
+)
 from munim.modules.connectors.schemas import (
     ConnectorView,
     EntityCount,
+    OAuthCompleteResult,
+    StartOAuthResponse,
     SyncResponse,
 )
+from munim.shared.config import get_settings
 from munim.shared.constants import (
     ConnectorName,
     CredentialStatus,
     ErrorCode,
     SourceSystem,
+)
+from munim.shared.crypto import (
+    InvalidStateTokenError,
+    decrypt_blob,
+    encrypt_blob,
+    verify_shopify_callback_hmac,
+    verify_state,
 )
 from munim.shared.errors import MunimError
 
@@ -89,6 +106,81 @@ def connect_demo(
     return _build_view(session, merchant_id, name)
 
 
+def start_oauth(merchant_id: str, name: ConnectorName, shop: str) -> StartOAuthResponse:
+    if name is not ConnectorName.SHOPIFY:
+        # Only Shopify has real OAuth in Phase 4. Connectors module shouldn't
+        # silently accept unsupported names — raise so the frontend gets a
+        # clear typed error.
+        raise NotImplementedError(
+            f"Real OAuth for connector {name.value!r} is not implemented yet."
+        )
+    authorize_url = build_shopify_authorize_url(merchant_id=merchant_id, shop=shop)
+    return StartOAuthResponse(authorize_url=authorize_url)
+
+
+async def complete_oauth(
+    session: Session,
+    merchant_id: str,
+    name: ConnectorName,
+    *,
+    code: str,
+    state: str,
+    shop: str,
+    callback_params: dict[str, str],
+) -> OAuthCompleteResult:
+    settings = get_settings()
+
+    # 1. HMAC verify Shopify's callback signature (proves Shopify sent this).
+    verify_shopify_callback_hmac(callback_params, settings.shopify_client_secret)
+
+    # 2. Verify our state token (proves we initiated this flow, no replay).
+    state_payload = verify_state(state, settings.credentials_encryption_key)
+    if state_payload.get("merchant_id") != merchant_id:
+        raise InvalidStateTokenError(
+            message="State token's merchant_id does not match current session."
+        )
+    if state_payload.get("shop") != shop:
+        raise InvalidStateTokenError(message="State token's shop does not match callback shop.")
+
+    # 3. Exchange code for access token.
+    async with httpx.AsyncClient() as client:
+        token = await exchange_shopify_code(client, shop=shop, code=code)
+
+    # 4. Persist encrypted credential. Upsert on (merchant_id, connector).
+    blob_plaintext = json.dumps(
+        {
+            "status": CredentialStatus.CONNECTED.value,
+            "shop": shop,
+            "access_token": token.access_token,
+            "scopes": token.scopes,
+        }
+    )
+    encrypted = encrypt_blob(blob_plaintext, settings.credentials_encryption_key)
+
+    existing = session.exec(
+        select(ConnectorCredentials)
+        .where(ConnectorCredentials.merchant_id == merchant_id)
+        .where(ConnectorCredentials.connector == name.value)
+    ).first()
+    if existing is None:
+        session.add(
+            ConnectorCredentials(
+                merchant_id=merchant_id,
+                connector=name.value,
+                auth_blob_encrypted=encrypted,
+                status=CredentialStatus.CONNECTED.value,
+            )
+        )
+    else:
+        existing.auth_blob_encrypted = encrypted
+        existing.status = CredentialStatus.CONNECTED.value
+        session.add(existing)
+    session.flush()
+
+    view = _build_view(session, merchant_id, name)
+    return OAuthCompleteResult(connector=view)
+
+
 async def sync_connector(
     session: Session,
     merchant_id: str,
@@ -106,10 +198,23 @@ async def sync_connector(
             details={"connector": name.value},
         )
 
+    # Demo credentials store plain JSON (no secret to protect — just a
+    # fixture path). Real credentials are AES-GCM-encrypted JSON. We
+    # discriminate by status; demo NEVER goes through decrypt.
+    if credential_row.status == CredentialStatus.DEMO.value:
+        blob_dict = json.loads(credential_row.auth_blob_encrypted)
+    else:
+        settings = get_settings()
+        blob_plaintext = decrypt_blob(
+            credential_row.auth_blob_encrypted,
+            settings.credentials_encryption_key,
+        )
+        blob_dict = json.loads(blob_plaintext)
+
     credential = Credential(
         merchant_id=merchant_id,
         connector=name,
-        blob=json.loads(credential_row.auth_blob_encrypted),
+        blob=blob_dict,
     )
 
     connector = registry.get(name)

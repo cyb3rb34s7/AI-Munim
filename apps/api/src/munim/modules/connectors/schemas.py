@@ -51,3 +51,21 @@ class SyncResponse(BaseModel):
     started_at: datetime
     finished_at: datetime
     connector: ConnectorView
+
+
+class StartOAuthRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    shop: str
+
+
+class StartOAuthResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    authorize_url: str
+
+
+class OAuthCompleteResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    connector: ConnectorView
