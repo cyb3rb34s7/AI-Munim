@@ -1,12 +1,15 @@
 """ShopifyConnector — the first concrete implementation of `BaseConnector`.
 
 Phase 2: `validate` (demo only) + `sync_full`.
-Phase 4: `authorize_url` and `exchange_code` removed from BaseConnector ABC;
-         real credential validate + client updated in the same phase (Task 7).
+Phase 4: `validate` now also handles real (connected) credentials via
+         ShopifyClient.validate_credential (GET /shop.json with token).
+         `sync_full` routes through iter_orders which dispatches demo vs real.
 """
 
 from datetime import UTC, datetime
 from typing import ClassVar
+
+import httpx
 
 from munim.connectors.base import BaseConnector, Credential, SyncContext, SyncResult
 from munim.connectors.shopify.client import ShopifyClient
@@ -21,6 +24,10 @@ class ShopifyConnector(BaseConnector):
         status = credential.blob.get("status")
         if status == CredentialStatus.DEMO.value:
             return True
+        if status == CredentialStatus.CONNECTED.value:
+            async with httpx.AsyncClient() as http_client:
+                client = ShopifyClient(credential, http_client)
+                return await client.validate_credential()
         raise NotImplementedError(f"Credential status {status!r} is not handled in validate.")
 
     async def sync_full(self, ctx: SyncContext) -> SyncResult:

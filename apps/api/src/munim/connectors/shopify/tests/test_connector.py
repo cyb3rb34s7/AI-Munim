@@ -99,21 +99,24 @@ async def test_shopify_demo_sync_full_is_idempotent(session: Session) -> None:
     assert len(rows) == 3
 
 
-async def test_shopify_validate_accepts_demo_and_defers_real_credentials() -> None:
+async def test_shopify_validate_accepts_demo_credential() -> None:
     # Demo credentials always pass without a network call.
-    # Credentials with any other status raise NotImplementedError — not
-    # silently return True — so unverified credentials can't sneak through.
-    # (Task 7 updates this to support connected credentials via real HTTP.)
     connector = ShopifyConnector()
     assert await connector.validate(_demo_credential()) is True
 
-    real_cred = Credential(
+
+async def test_shopify_validate_raises_for_unknown_status() -> None:
+    # An unrecognised status must not silently return True — that would let
+    # unverified credentials through. Phase 4: demo and connected are handled;
+    # anything else raises NotImplementedError.
+    connector = ShopifyConnector()
+    unknown_cred = Credential(
         merchant_id=DEFAULT_MERCHANT_ID,
         connector=ConnectorName.SHOPIFY,
-        blob={"status": "connected", "access_token": "xxx"},
+        blob={"status": "unknown_status"},
     )
     with pytest.raises(NotImplementedError):
-        await connector.validate(real_cred)
+        await connector.validate(unknown_cred)
 
 
 async def test_shopify_sync_preserves_raw_payload_verbatim(session: Session) -> None:
