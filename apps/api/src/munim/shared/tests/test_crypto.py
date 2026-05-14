@@ -7,6 +7,7 @@ import time
 from typing import Any
 
 import pytest
+from cryptography.exceptions import InvalidTag
 
 from munim.shared.crypto import (
     HMACMismatchError,
@@ -34,19 +35,20 @@ def test_encrypt_decrypt_round_trip() -> None:
 
 
 def test_decrypt_rejects_tampered_ciphertext() -> None:
-    # AES-GCM is AEAD — tampering must fail authentication, not silently
-    # decrypt to garbage. Without this guard, an attacker who can write to
-    # the DB can substitute their own token.
+    # AES-GCM is AEAD — tampering must fail authentication with InvalidTag,
+    # not silently decrypt to garbage. Asserting the specific exception
+    # catches a regression where someone catches+swallows InvalidTag
+    # somewhere up the stack.
     ciphertext = encrypt_blob("hello", TEST_KEY)
     tampered = ciphertext[:-4] + ("A" if ciphertext[-1] != "A" else "B") * 4
-    with pytest.raises(Exception):  # cryptography.exceptions.InvalidTag
+    with pytest.raises(InvalidTag):
         decrypt_blob(tampered, TEST_KEY)
 
 
 def test_decrypt_rejects_wrong_key() -> None:
     ciphertext = encrypt_blob("hello", TEST_KEY)
     other_key = base64.urlsafe_b64encode(b"\xff" * 32).rstrip(b"=").decode()
-    with pytest.raises(Exception):
+    with pytest.raises(InvalidTag):
         decrypt_blob(ciphertext, other_key)
 
 

@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
+from cryptography.exceptions import InvalidTag
 from sqlalchemy import func
 from sqlmodel import Session, col, select
 
@@ -63,6 +64,20 @@ class ConnectorSyncError(MunimError):
     code = ErrorCode.CONNECTOR_SYNC_FAILED.value
     http_status = 500
     message = "Sync failed."
+
+
+class CredentialUnreadableError(MunimError):
+    """The stored credential blob could not be decrypted or parsed.
+
+    Surfaced by `sync_connector` when AES-GCM authentication fails (tampered
+    DB row), the key has changed, or the decrypted blob is not valid JSON.
+    Per Phase 4 reviewer finding — must be a typed code so the frontend can
+    distinguish credential corruption from a random 500.
+    """
+
+    code = ErrorCode.AUTH_CREDENTIAL_UNREADABLE.value
+    http_status = 500
+    message = "Stored credential could not be decrypted."
 
 
 def list_connectors(
@@ -205,11 +220,22 @@ async def sync_connector(
         blob_dict = json.loads(credential_row.auth_blob_encrypted)
     else:
         settings = get_settings()
-        blob_plaintext = decrypt_blob(
-            credential_row.auth_blob_encrypted,
-            settings.credentials_encryption_key,
-        )
-        blob_dict = json.loads(blob_plaintext)
+        try:
+            blob_plaintext = decrypt_blob(
+                credential_row.auth_blob_encrypted,
+                settings.credentials_encryption_key,
+            )
+            blob_dict = json.loads(blob_plaintext)
+        except (InvalidTag, ValueError, json.JSONDecodeError) as exc:
+            # Per Phase 4 reviewer finding — typed code rather than the
+            # generic system.unexpected the global handler would emit.
+            raise CredentialUnreadableError(
+                message=(
+                    f"Failed to read stored credential for {name.value!r}; "
+                    "the blob is corrupted or the encryption key has changed."
+                ),
+                details={"connector": name.value, "exc_type": type(exc).__name__},
+            ) from exc
 
     credential = Credential(
         merchant_id=merchant_id,

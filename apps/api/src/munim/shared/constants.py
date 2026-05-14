@@ -22,6 +22,7 @@ class ErrorCode(StrEnum):
     AUTH_INVALID_STATE = "auth.invalid_state"
     AUTH_HMAC_MISMATCH = "auth.hmac_mismatch"
     AUTH_OAUTH_EXCHANGE_FAILED = "auth.oauth_exchange_failed"
+    AUTH_CREDENTIAL_UNREADABLE = "auth.credential_unreadable"
 
 
 class EntityType(StrEnum):

@@ -18,6 +18,7 @@ import httpx
 from munim.connectors.base import Credential
 from munim.shared.config import get_settings
 from munim.shared.constants import CredentialStatus
+from munim.shared.crypto import validate_shop_domain
 
 _DEFAULT_LIMIT = 250
 _MAX_RETRIES_ON_429 = 5
@@ -48,6 +49,11 @@ class ShopifyClient:
         """Real-mode credential check via GET /admin/api/{ver}/shop.json."""
         settings = get_settings()
         shop = self._credential.blob["shop"]
+        # Defense in depth: even though the blob is AES-GCM-protected at rest,
+        # re-validating the shop value here keeps each callsite self-defending
+        # against any future write path that forgets to validate (per Phase 4
+        # reviewer finding — SSRF gap).
+        validate_shop_domain(shop)
         token = self._credential.blob["access_token"]
         url = f"https://{shop}/admin/api/{settings.shopify_api_version}/shop.json"
         response = await self._http_client.get(
@@ -75,6 +81,8 @@ class ShopifyClient:
     async def _iter_real_orders(self) -> AsyncIterator[dict[str, Any]]:
         settings = get_settings()
         shop = self._credential.blob["shop"]
+        # Defense in depth — see comment in validate_credential.
+        validate_shop_domain(shop)
         token = self._credential.blob["access_token"]
         base_url = f"https://{shop}/admin/api/{settings.shopify_api_version}/orders.json"
         url: str | None = f"{base_url}?limit={_DEFAULT_LIMIT}&status=any"

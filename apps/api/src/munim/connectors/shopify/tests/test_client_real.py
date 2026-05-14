@@ -4,16 +4,17 @@ import respx
 
 from munim.connectors.base import Credential
 from munim.connectors.shopify.client import ShopifyClient
-from munim.shared.constants import ConnectorName
+from munim.shared.constants import ConnectorName, CredentialStatus
+from munim.shared.crypto import InvalidShopDomainError
 
 
-def _connected_cred() -> Credential:
+def _connected_cred(shop: str = "munim-dev.myshopify.com") -> Credential:
     return Credential(
         merchant_id="m_default",
         connector=ConnectorName.SHOPIFY,
         blob={
-            "status": "connected",
-            "shop": "munim-dev.myshopify.com",
+            "status": CredentialStatus.CONNECTED.value,
+            "shop": shop,
             "access_token": "shpat_test",
             "scopes": ["read_orders"],
         },
@@ -100,3 +101,26 @@ async def test_validate_returns_false_on_401() -> None:
     async with httpx.AsyncClient() as http_client:
         client = ShopifyClient(_connected_cred(), http_client)
         assert await client.validate_credential() is False
+
+
+async def test_iter_orders_rejects_invalid_shop_in_blob_before_any_http_call() -> None:
+    # Defense-in-depth (Phase 4 reviewer finding): even though the blob is
+    # AES-GCM-protected at rest, the read path must self-defend against a
+    # future write path that forgets validate_shop_domain. Asserting NO HTTP
+    # call is made (respx not engaged) catches a regression where the read
+    # path stops validating.
+    bad = _connected_cred(shop="evil.attacker.com")
+    async with httpx.AsyncClient() as http_client:
+        client = ShopifyClient(bad, http_client)
+        with pytest.raises(InvalidShopDomainError):
+            async for _ in client.iter_orders():
+                pass
+
+
+async def test_validate_credential_rejects_invalid_shop_in_blob() -> None:
+    # Same defense-in-depth check as iter_orders, on the validate path.
+    bad = _connected_cred(shop="evil.attacker.com")
+    async with httpx.AsyncClient() as http_client:
+        client = ShopifyClient(bad, http_client)
+        with pytest.raises(InvalidShopDomainError):
+            await client.validate_credential()

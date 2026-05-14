@@ -4,11 +4,18 @@ import json as _json
 import time
 
 import httpx
+import pytest
 import respx
 from sqlmodel import Session, select
 
+from munim.connectors.registry import default_registry
 from munim.models import ConnectorCredentials
-from munim.modules.connectors.service import complete_oauth, start_oauth
+from munim.modules.connectors.service import (
+    CredentialUnreadableError,
+    complete_oauth,
+    start_oauth,
+    sync_connector,
+)
 from munim.shared.config import get_settings
 from munim.shared.constants import ConnectorName, CredentialStatus
 from munim.shared.crypto import decrypt_blob, sign_state
@@ -76,3 +83,25 @@ async def test_complete_oauth_stores_encrypted_token(session: Session) -> None:
         decrypt_blob(row.auth_blob_encrypted, settings.credentials_encryption_key)
     )
     assert decrypted["access_token"] == "shpat_real"
+
+
+async def test_sync_raises_credential_unreadable_when_blob_is_corrupt(session: Session) -> None:
+    # Phase 4 reviewer finding (typed-error contract): if the stored
+    # auth_blob_encrypted can't be decrypted (DB tamper, key rotation, or
+    # legacy garbage), the failure must surface as auth.credential_unreadable
+    # — NOT system.unexpected, which the frontend's code-based branch can't
+    # distinguish from a random 500. Without the typed wrap in sync_connector,
+    # this test fails by raising InvalidTag up to the global handler.
+    session.add(
+        ConnectorCredentials(
+            merchant_id="m_default",
+            connector=ConnectorName.SHOPIFY.value,
+            auth_blob_encrypted="this-is-not-real-aes-gcm-output",
+            status=CredentialStatus.CONNECTED.value,
+        )
+    )
+    session.commit()
+
+    with pytest.raises(CredentialUnreadableError) as exc_info:
+        await sync_connector(session, "m_default", ConnectorName.SHOPIFY, default_registry())
+    assert exc_info.value.code == "auth.credential_unreadable"

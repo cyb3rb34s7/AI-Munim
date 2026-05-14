@@ -89,9 +89,11 @@ async def exchange_shopify_code(
     body = response.json()
     access_token = body.get("access_token")
     if not isinstance(access_token, str):
+        # Mirror the 4xx path's truncation so an unexpected Shopify response
+        # body can't flood the error envelope (Phase 4 reviewer finding).
         raise OAuthExchangeError(
             message="Shopify response missing access_token.",
-            details={"body": body},
+            details={"body": str(body)[:500]},
         )
     scope_value = body.get("scope", "")
     scopes = [s for s in scope_value.split(",") if s] if isinstance(scope_value, str) else []
