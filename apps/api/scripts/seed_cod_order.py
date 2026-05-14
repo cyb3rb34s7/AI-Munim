@@ -8,31 +8,42 @@ order, this script seeds one local-only row so the agent has something to score.
 
 from datetime import UTC, datetime
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from munim.models import Record
 from munim.shared.constants import EntityType, PaymentMethod, SourceSystem
 from munim.shared.db import DEFAULT_MERCHANT_ID, get_engine, init_db
 
 
+_SEED_SOURCE_ID = "seed_cod_demo"
+
+
 def main() -> None:
     init_db()
     with Session(get_engine()) as session:
+        existing = session.exec(
+            select(Record)
+            .where(Record.merchant_id == DEFAULT_MERCHANT_ID)
+            .where(Record.source_system == SourceSystem.SHOPIFY.value)
+            .where(Record.source_id == _SEED_SOURCE_ID)
+        ).first()
+        if existing is not None:
+            print(f"Already seeded — record id={existing.id}, skipping.")
+            return
         row = Record(
             merchant_id=DEFAULT_MERCHANT_ID,
             source_system=SourceSystem.SHOPIFY.value,
-            source_id="seed_cod_demo",
+            source_id=_SEED_SOURCE_ID,
             entity_type=EntityType.ORDER.value,
             fetched_at=datetime.now(UTC),
             payload_hash="seed_cod_h",
-            raw={"id": "seed_cod_demo", "source": "agent-demo-seed"},
+            raw={"id": _SEED_SOURCE_ID, "source": "agent-demo-seed"},
             normalized={
                 "placed_at": "2026-05-14T23:45:00+05:30",
                 "total_inr": "6000.00",
                 "currency": "INR",
                 "payment_method": PaymentMethod.COD.value,
                 "financial_status": "pending",
-                "fulfillment_status": None,
                 "pincode": "110001",
                 "customer_source_id": "seed_cust_high_risk",
                 "utm_campaign": "demo",

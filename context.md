@@ -8,13 +8,13 @@
 
 ## Now
 
-Phase 6 complete (backend). 162 backend tests green. RTO Risk Mitigator agent live, manually triggerable via `POST /agents/rto_mitigator/run`, full decision list (signals + weights + reasoning) persisted to `run_log` per run. Zero outbound HTTP calls — locked at the test level. Frontend Agent Runs page is Phase 8; frontend chat page is Phase 7.
+Phase 6 complete (backend + review cycle). 168 backend tests green (was 162; +6 from review fixes). RTO Risk Mitigator agent live, manually triggerable via `POST /agents/rto_mitigator/run`, full decision list (signals + weights + reasoning) persisted to `run_log` per run. Zero outbound HTTP calls — locked at the test level. Live smoke verified: a seeded ₹6000 high-pincode-risk late-night COD order scores 0.618 → `convert_to_prepaid`, est. ₹2595.60 saved.
 
-- Agent is deterministic by design: `signals.py` (pure functions) -> `scoring.py` (weighted formula + threshold tree) -> `agent.py` (orchestrator: scan COD, score, write one RunLog).
+- Agent is deterministic by design: `signals.py` (pure functions) -> `scoring.py` (weighted formula + threshold tree, Decimal end-to-end for money) -> `agent.py` (orchestrator: scan COD, score, write one RunLog).
 - One `RunLog` row per agent run; `detail_json` carries `run_id`, `agent`, `orders_scanned`, `actions_proposed`, `decisions[]` with full per-order signal scores, diagnostics, weights, action, estimated INR saved, and a one-line `reasoning` string.
-- `respx.mock` test locks the brief's "don't actually send anything" constraint.
+- `respx.mock` test locks the brief's "don't actually send anything" constraint **for httpx specifically** — future contributors must use httpx to inherit the guarantee.
 - Customer signal returns population baseline 0.2 for any customer with < 3 history; documented honestly. Score path uses real customer-RTO rate only once history is meaningful.
-- `apps/api/scripts/seed_cod_order.py` seeds one high-RTO-risk local COD row so the live demo has something non-trivial to show — Shopify's `draftOrderComplete(paymentPending: true)` quirk means real COD orders aren't yet produced through the connector path.
+- `apps/api/scripts/seed_cod_order.py` is idempotent — seeds one high-RTO-risk local COD row so the live demo has something non-trivial to show. Shopify's `draftOrderComplete(paymentPending: true)` quirk means real COD orders aren't yet produced through the connector path.
 
 ---
 
@@ -28,7 +28,7 @@ Phase 6 complete (backend). 162 backend tests green. RTO Risk Mitigator agent li
 - 2026-05-14 — **Phase 3 complete.** Connectors + Records API, AppShell + nav, two new frontend modules. End-to-end demo working at `/connectors` and `/records`. Reviewer subagent surfaced 2 Important findings (ConnectorSyncError dead code + duplicated records query key); all applied + tests added. Live browser smoke (agent-browser) walked all 8 steps of the recipe — pass.
 - 2026-05-14 — **Phase 4 complete.** Real OAuth + Admin API for Shopify. Reviewer surfaced 3 Important findings (typed decrypt error, shop-domain defense-in-depth, body truncation); all applied. 95 backend tests green. Live smoke against real Shopify dev store walked Connect → Sync → Records drawer with real Admin API data.
 - 2026-05-14 — **Phase 5 complete.** Chat backend + citation contract, the scored axis of the brief. Reviewer surfaced 8 Important findings (regex greedy comma, Unicode minus, Indian-format, used_citations cross-check, silent fallback in _row_to_citation, magic strings, observability gaps, broad except); all applied. 135 backend tests green. Live smoke against real OpenAI gpt-4o-mini + real Shopify data: chat produces grounded answers with cite markers, math correct, pincode preserved, trace_id propagated.
-- 2026-05-14 — **Phase 6 complete (backend).** RTO Risk Mitigator agent. Deterministic signal extractors + weighted scoring + threshold tree, one `RunLog` row per run with the full decision list, `POST /agents/rto_mitigator/run` + `GET /agent-runs` endpoints. `respx.mock` test locks zero outbound HTTP. 162 backend tests green. Reviewer + manual smoke pending.
+- 2026-05-14 — **Phase 6 complete (backend + review cycle).** RTO Risk Mitigator agent. Deterministic signal extractors + weighted scoring + threshold tree, one `RunLog` row per run with the full decision list, `POST /agents/rto_mitigator/run` + `GET /agent-runs` endpoints. `respx.mock` test locks zero outbound HTTP (httpx specifically). Reviewer surfaced 3 CRITICAL + 9 IMPORTANT findings (timezone bug, magic strings, dead error code, float in money, silent fallback, asserts as contracts, etc.); all fixed in one commit. 168 backend tests green. Live smoke shows convert_to_prepaid with ₹2595.60 estimated saved on seeded high-risk COD.
 
 ---
 
@@ -46,6 +46,50 @@ Ranking re-evaluated at the start of each new phase.
 ## Problems & solutions
 
 Every entry is a paid lesson. Read at the start of every session. Never repeat one.
+
+### 2026-05-14 (Phase 6 review) — read `.hour` on a wire-format UTC datetime gives wrong band for IST-local decisions
+
+**Problem:** `time_of_order_risk` did `datetime.fromisoformat(placed_at_iso).hour`. The mapper normalizes all timestamps to UTC before storage (per `§8.2` wire-format), so a 23:45 IST order is stored as `"2026-05-10T18:15:00Z"`. `.hour` returned 18 → "evening" (score 0.4). The agent therefore mis-scored every real late-night COD order it was designed to catch. Tests passed only because the seed helpers used local-offset strings like `+05:30` instead of the UTC-normalized form the connector produces.
+
+**Root cause:** §8.2 says "UTC ISO 8601 on the wire, IST at display." Decision logic that depends on wall-clock hour is implicitly at the display boundary, but the code was reading the wire format directly.
+
+**Solution:** Convert to `ZoneInfo("Asia/Kolkata")` before reading hour. Raise on naive datetimes (we never tolerate naive — see the `_parse_iso` lesson below). Added a UTC-Z test case (`test_time_of_order_risk_utc_input_converts_to_ist_late_night`) that would have caught the bug.
+
+**Guardrail:** Any decision logic that branches on a wall-clock hour, day-of-week, weekday/weekend, or business-hours boundary must explicitly convert to the user-facing timezone (IST for this app). The wire format is UTC; never read calendar/clock fields off a UTC datetime when the decision is local-time-semantic. Pattern: `dt.astimezone(_IST).hour`.
+
+Windows note: `ZoneInfo` requires `tzdata` package — added as a dep.
+
+### 2026-05-14 (Phase 6 review) — `Decimal(str(float_value))` cleans imprecision after the fact but is still a §8.1 violation
+
+**Problem:** The scoring function multiplied `total_inr * Decimal(str(score)) * Decimal(str(success_rate))` where `score` and `success_rate` were floats. The `.quantize(Decimal("0.01"))` rounded the result to clean cents so the displayed value looked fine — but float imprecision had already entered the pipeline. §8.1 ("floats never touch a rupee value, anywhere, ever") applies even when the visible output is clean, because pipeline composability breaks the moment a downstream consumer skips the quantize.
+
+**Solution:** Compute the score in `Decimal` from the start. Module-level threshold and success-rate constants are `Decimal("0.6")` etc. The `RTOWeights` Pydantic model stays float-typed for JSON serialization, but each weight is cast `Decimal(str(w.value))` once at the boundary, then all arithmetic is Decimal. The signal score (a 0-1 probability, not money) stays float and is cast to Decimal at the boundary with `Decimal(str(...))`.
+
+**Guardrail:** §8.1 forbids float values in any rupee calculation, not just in the final displayed amount. If money flows through a value at any point, that value is Decimal — even if a `quantize` later cleans it up. The "looks clean after quantize" defense is invalid.
+
+### 2026-05-14 (Phase 6 review) — registered ErrorCode values must have a raise site; dead codes mislead the frontend (recurrence of Phase 3 lesson)
+
+**Problem:** Phase 6 added `ErrorCode.AGENT_RUN_FAILED = "agent.run_failed"` but no code raised it. This is the same pattern the Phase 3 review flagged for `ConnectorSyncError`. Dead error codes claim a typed error path exists when it doesn't; the frontend's code-based branching is broken.
+
+**Solution:** Wrap `agent.run(...)` in `trigger_agent` with a narrow `except (KeyError, ValueError)` → typed `AgentRunFailedError` (with `from exc` to preserve the chain). Added two tests (`test_trigger_agent_wraps_malformed_record_data_in_typed_failure`, `test_trigger_agent_naive_timestamp_wrapped_as_typed_failure`) that exercise the wrap on real malformed records. Also added `AGENT_RUN_NOT_FOUND` for `AgentRunNotFoundError` (was reusing the cross-domain `record.not_found`).
+
+**Guardrail:** Every `ErrorCode` enum entry must have a `raise` site OR be deleted. Audit at the end of each phase: `rg "ErrorCode\.\w+" --type py` against `raise .*Error` sites. If a code has no raise site, either wire it up with a test OR delete it. Dead codes are not "documentation" — they are a contract bug.
+
+### 2026-05-14 (Phase 6 review) — magic strings in agent branching survive even after Phase 5's enum sweep
+
+**Problem:** `customer_rto_rate` compared `r.normalized.get("fulfillment_status") == "rto"` — bare string literal in a branching expression. §7 is explicit; this slipped past Phase 5's StrEnum sweep because fulfillment statuses hadn't appeared in code paths until now.
+
+**Solution:** Added `FulfillmentStatus` StrEnum (`PENDING`, `FULFILLED`, `PARTIAL`, `RTO`, `CANCELLED`) to `shared/constants.py`. Updated `signals.py`, test fixtures, and the seed script to reference `FulfillmentStatus.RTO.value`.
+
+**Guardrail:** When introducing a new domain concept (statuses, methods, types), define the StrEnum before writing the branching code. The first comparison against a status string IS the moment to create the enum. Auditing tip: any `== "<literal>"` in branching code is a §7 smell; if the literal denotes a status/type/method, it belongs in an enum.
+
+### 2026-05-14 (Phase 6 review) — `respx.mock` "no side effects" guarantee only covers httpx, not requests/urllib/socket
+
+**Problem:** `test_agent_makes_zero_outbound_http_calls` uses `@respx.mock`. respx patches httpx's transport — an unrouted httpx call raises `AllMockedAssertionError`. But respx does NOT intercept `requests`, `urllib`, or raw socket traffic. A future contributor adding `requests.post(...)` to the agent would silently slip past this test. The brief-locking guarantee is narrower than the doc claim.
+
+**Solution (v0):** Documented the limitation in the CHANGELOG and in this section. Adding a socket-level mock is brittle on Windows; left as a future hardening pass. Today the project is httpx-only so the practical guarantee holds.
+
+**Guardrail:** Brief-locking tests should be paired with a documented scope. If the test relies on a library-specific mock (respx for httpx, vcr for requests, etc.), the scope is "no calls via that library." A real "no network anywhere" test would patch `socket.socket.connect` and assert no non-loopback connect attempts — defer until v1.
 
 ### 2026-05-14 (Phase 5 live smoke) — pydantic-settings does not propagate values to os.environ; use python-dotenv as the canonical bridge
 

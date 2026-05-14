@@ -19,6 +19,30 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-14 — Phase 6 review fixes
+
+**What changed:** Reviewer subagent surfaced 3 CRITICAL + 9 IMPORTANT findings against `docs/conventions.md`. All addressed in one fix commit. Highest-value catches:
+- **Timezone bug in `time_of_order_risk`** — was reading `.hour` on a UTC-normalized datetime, so a 23:45 IST order scored as "evening" (18:00 UTC). Fixed by converting to `Asia/Kolkata` before reading the hour; raises on naive timestamps.
+- **Magic string `"rto"` in branching** — added `FulfillmentStatus` StrEnum; `customer_rto_rate` and test fixtures now go through the enum.
+- **Dead `AGENT_RUN_FAILED` error code** — regression of the Phase 3 paid lesson. Wrapped `agent.run` in a narrow `(KeyError, ValueError)` except → typed `AgentRunFailedError` with a test that exercises the wrap on malformed records.
+- **Decimal money discipline** — score now computed in `Decimal` end-to-end so the rupee math never touches float (§8.1).
+- **`AgentRunNotFoundError` was reusing `record.not_found`** — added `AGENT_RUN_NOT_FOUND` for clean frontend branching (§4.3).
+- **Unreachable `category` weight** — dropped and renormalized to (value=0.28, pincode=0.33, time=0.17, customer=0.22); run-log weights now honestly reflect what scored.
+- **Silent `""` fallback for missing `customer_source_id`** — replaced with explicit `None` + diagnostic flag (§10).
+- **`assert`s as runtime contracts** — replaced with explicit `if x is None: raise RuntimeError(...)`; asserts vanish under `python -O`.
+
+**Test count:** 162 → 168 (+6: UTC-Z late_night, naive-timestamp raise, customer-id-missing, two AgentRunFailedError wraps, Decimal-cents invariant).
+
+**Deps:** added `tzdata>=2024.2` (Windows ZoneInfo needs it).
+
+**Known limitation documented:** `test_agent_makes_zero_outbound_http_calls` uses `respx.mock` which only intercepts httpx; a future contributor switching to `requests`/`urllib` would slip past. Today the project is httpx-only so the guarantee holds.
+
+**Files touched:** `apps/api/src/munim/agents/rto_mitigator/{signals,scoring,agent}.py`, `apps/api/src/munim/modules/agent_runs/{service.py,tests/test_service.py}`, `apps/api/src/munim/shared/constants.py`, `apps/api/pyproject.toml`, plus test files for each.
+
+**Reverts cleanly?:** yes — single fix commit.
+
+---
+
 ## 2026-05-14 — Phase 6: RTO Risk Mitigator agent (backend)
 
 **What changed:** New `apps/api/src/munim/agents/rto_mitigator/` package — pure-function signal extractors (`order_value_bucket`, `pincode_risk`, `time_of_order_risk`, `customer_rto_rate`), weighted scoring with threshold tree (`convert_to_prepaid` >= 0.6, `confirmation_call` >= 0.4, else `no_action`), and a deterministic orchestrator that scans COD orders, scores each, and writes ONE `RunLog` row per agent run containing the full per-order decision list in `detail_json`. New `modules/agent_runs/` exposes `POST /agents/{name}/run`, `GET /agent-runs`, `GET /agent-runs/{id}` (all under the standard envelope). New `AgentName` + `AgentActionType` StrEnums in `shared/constants.py` so the action set is type-checked. The agent is deterministic (no LLM) by design — auditable, cheap, predictable; the brief asks for visible reasoning, which the run log provides as exact math.
