@@ -8,12 +8,11 @@
 
 ## Now
 
-Phase 4 complete + review-cycle fixes + live smoke against real Shopify. 95 backend tests green.
-- Backend: ruff + format + mypy + pytest — all pass (95/95).
-- Reviewer (Phase 4) caught 3 Important findings — decrypt failure surfacing as system.unexpected (typed wrap added), shop-domain validation missing at read time (defense-in-depth added), OAuthExchangeError body truncation. All fixed, all tested.
-- **Live smoke (2026-05-14, real Shopify dev store):** Connect (real) → Shopify OAuth → callback → encrypted access token persisted → click Sync → `3 upserted, 0 skipped` → Records page shows 3 real orders → drawer shows the raw Shopify Admin API payload (admin_graphql_api_id, app_id, billing_address, browser_ip, cart_token, ...) byte-equal alongside the normalized Order. Idempotency confirmed: second sync → `0 upserted, 3 skipped`. UTC normalization confirmed: `placed_at: "2026-05-14T15:33:40Z"` next to raw `+05:30` offset.
-- Test orders seeded via Shopify CLI's `store execute` GraphQL `draftOrderCreate` + `draftOrderComplete` (orderCreate is offline-token-only; draftOrder works with online CLI tokens).
-- Real Shopify Admin API call observed: `GET /admin/api/2026-04/orders.json` → 200 OK with X-Shopify-Access-Token; pagination + 429 retry paths in place but not yet exercised live.
+Phase 5 complete. Backend chat with full citation contract. POST /chat/messages live. 126 tests green. Frontend chat page is Phase 6.
+- pydantic-ai 1.96.0 installed; TestModel API confirmed (custom_output_args + call_tools=[...]).
+- ToolReturnPart.content holds the raw Python return value — citation walk confirmed empirically.
+- Enforcer regex: currency (₹/Rs./\$) + percent (%) + count+entity_noun + comma-thousands. Does NOT flag: dates (hyphen-separated), long bare IDs, pincodes (no comma/noun/currency). _PROXIMITY_CHARS=64.
+- All 7 tasks committed. 126/126 green. ruff + mypy clean.
 
 ---
 
@@ -26,17 +25,17 @@ Phase 4 complete + review-cycle fixes + live smoke against real Shopify. 95 back
 - 2026-05-13 — **Phase 2 complete.** Universal 4-table schema (`merchant`, `connector_credentials`, `record`, `run_log`), `Order` Pydantic (canonical normalized shape), `BaseConnector` ABC + `RowSink` writer, `ShopifyConnector` demo sync end-to-end. Reviewer subagent surfaced 1 critical + 4 important findings (all time-handling + extra=forbid + magic string); all applied. 36 tests, all green. See `CHANGELOG.md` 2026-05-13 Phase 2 entry for details.
 - 2026-05-14 — **Phase 3 complete.** Connectors + Records API, AppShell + nav, two new frontend modules. End-to-end demo working at `/connectors` and `/records`. Reviewer subagent surfaced 2 Important findings (ConnectorSyncError dead code + duplicated records query key); all applied + tests added. Live browser smoke (agent-browser) walked all 8 steps of the recipe — pass.
 - 2026-05-14 — **Phase 4 complete.** Real OAuth + Admin API for Shopify. Reviewer surfaced 3 Important findings (typed decrypt error, shop-domain defense-in-depth, body truncation); all applied. 95 backend tests green. Live smoke against real Shopify dev store walked Connect → Sync → Records drawer with real Admin API data.
+- 2026-05-14 — **Phase 5 complete.** Chat backend + citation contract, the scored axis of the brief. 126 backend tests green. POST /chat/messages live.
 
 ---
 
 ## Next
 
-1. **Phase 5 — Meta Ads + Shiprocket connectors.** Same pattern as Shopify Phase 4: each gets its own `oauth_<name>.py`, demo fixture, real client, mapper, and test suite. Register in `default_registry`.
-2. **Phase 5 — Chat tools over the schema.** `query_orders`, `query_shipments`, `query_ad_spend`, `compute_metric`, `propose_action`. Tool return shape with `RowCitation`s.
-3. **Phase 6 — Citation contract.** PydanticAI integration, system prompt, structured `GroundedAnswer` output, fail-closed post-processor for uncited numbers.
-4. **Phase 7 — RTO Risk Mitigator agent.** APScheduler cron + signal extraction + scoring + `run_log` writes. No side effects.
-5. **Phase 8 — Frontend chat + agent pages.** Streaming `useChat`, agent runs table.
-6. **Phase 9 — Demo seed data + `docker-compose up` story + README rewrite** (the deliverable's headline artifact).
+1. **Phase 6 — Frontend chat page.** `useChat` hook, citation badges, `POST /chat/messages` wired, streaming optional.
+2. **Phase 7 — RTO Risk Mitigator agent.** APScheduler cron + signal extraction + scoring + `run_log` writes. No side effects.
+3. **Phase 8 — Frontend agent runs page.** Agent runs table, run detail.
+4. **Phase 9 — Demo seed data + `docker-compose up` story + README rewrite** (the deliverable's headline artifact).
+5. **Phase 10 — Meta Ads + Shiprocket connectors.** Same pattern as Shopify Phase 4.
 
 Ranking re-evaluated at the start of each new phase.
 
@@ -45,6 +44,36 @@ Ranking re-evaluated at the start of each new phase.
 ## Problems & solutions
 
 Every entry is a paid lesson. Read at the start of every session. Never repeat one.
+
+### 2026-05-14 (Phase 5) — pydantic-ai 1.96.0 TestModel calls ALL tools by default, breaking agent tests
+
+**Problem:** `TestModel(custom_output_args=canned)` without `call_tools` arg defaults to `call_tools='all'`. The test agent has `_compute_metric` registered; TestModel auto-generates a `formula` arg ('a') which hits `UnknownMetricFormulaError`. Agent tests failed.
+
+**Root cause:** The plan assumed TestModel with `custom_output_args` would skip tool calls and just return the canned output. In pydantic-ai 1.96.0, the default is to call all tools before returning the final output.
+
+**Solution:** Pass `call_tools=['_query_orders']` (or `call_tools=[]`) to control which tools the mock invokes. For the test that checks citation propagation, use `call_tools=['_query_orders']` so real citations flow through the message history. For the hallucinated-ID test, use `call_tools=[]` so available_citations is empty and the enforcer correctly rejects row 99999.
+
+**Guardrail:** When using TestModel in pydantic-ai 1.96.0+, always specify `call_tools` explicitly. Never rely on the default. The tools that are called must be able to handle auto-generated args (or use `call_tools=[]`).
+
+### 2026-05-14 (Phase 5) — pydantic-ai internal _messages module not public-exportable
+
+**Problem:** `from pydantic_ai._agent_graph import _messages as pai_messages` imported `ToolReturnPart` from a private module. mypy errored: "Module does not explicitly export attribute '_messages'".
+
+**Root cause:** `_agent_graph` is a private module; `_messages` within it is also private. The public API is `pydantic_ai.messages`.
+
+**Solution:** Import `from pydantic_ai.messages import ToolReturnPart`. This is the public surface and mypy accepts it.
+
+**Guardrail:** Always import pydantic-ai types from the public `pydantic_ai.messages` module, not from private `_agent_graph` internals. The public API is stable; the private one is not.
+
+### 2026-05-14 (Phase 5) — GroundedAnswer cannot use extra="forbid" with PydanticAI structured output
+
+**Problem:** PydanticAI's structured output mechanism serialises the output type's schema as a JSON schema tool call. With `extra="forbid"`, the JSON schema generation sometimes injects additional properties that conflict with the strict mode.
+
+**Root cause:** PydanticAI 1.96.0 uses tool-call-based structured output where the output is returned as a function call argument. The internal bookkeeping may not align with extra="forbid" in all versions.
+
+**Solution:** `GroundedAnswer` intentionally omits `extra="forbid"`. All other public types keep it. This exception is documented in the class docstring.
+
+**Guardrail:** When a Pydantic model is used as `output_type` in a PydanticAI Agent, test `extra="forbid"` empirically before enabling it. If it breaks the agent loop, document the exception and move on.
 
 ### 2026-05-14 (Phase 4 live smoke) — Shopify "Protected Customer Data" gate is separate from OAuth scopes
 
@@ -170,6 +199,20 @@ Every entry is a paid lesson. Read at the start of every session. Never repeat o
 
 Non-obvious choices made during the build. Different from `CHANGELOG.md` (mechanical: what changed). This is judgmental: why we picked X over Y.
 
+### 2026-05-14 — Phase 5: enforcer `_PROXIMITY_CHARS = 64` window
+
+**Decision:** The citation enforcer covers any numeric claim whose span falls within 64 characters BEFORE the start of a `[cite:...]` marker. 64 was chosen to cover the longest realistic "N thing[s] worth ₹X,XXX[cite:...]" where both the count and the currency appear before a single trailing cite. Tuned empirically against the 13 enforcer tests.
+
+**Why:** A smaller window (e.g., 10) would incorrectly strip "12 orders worth ₹15,750[cite:1]" because "12 orders" is more than 10 chars from the cite. A larger window (e.g., 200) would incorrectly keep uncited numbers in adjacent sentences. 64 is the sweet spot for single-clause citations.
+
+**Revisit if:** The LLM starts writing multi-line citations where the number and the cite are separated by a semicolon or newline. In that case, consider a proximity model based on sentence boundaries rather than character count.
+
+### 2026-05-14 — Phase 5: TestModel.call_tools for citation plumbing in agent tests
+
+**Decision:** Agent integration tests use `TestModel(call_tools=['_query_orders'], custom_output_args=canned)` rather than `call_tools=[]`. This forces the query tool to run against the real seeded DB, populating `available_citations` with real row IDs. The canned answer then cites those real IDs, and the enforcer accepts it. Tests that check hallucination-rejection use `call_tools=[]` so `available_citations` is empty and any cited ID is by definition hallucinated.
+
+**Why:** The alternative (mocking `available_citations` directly) would test the enforcer in isolation — which is already tested in `test_enforcer.py`. The agent test is specifically testing the end-to-end citation plumbing: tool runs → citations collected → enforcer called with real citations. Bypassing the tool would make the test vacuous per §13.4.
+
 ### 2026-05-14 — Phase 4: `authorize_url`/`exchange_code` removed from BaseConnector ABC
 
 **Decision:** Dropped `authorize_url` and `exchange_code` from `BaseConnector` ABC. Each provider's OAuth is now in its own `oauth_<name>.py` (e.g., `oauth_shopify.py`). Phase 5 will add `oauth_meta_ads.py`, etc.
@@ -254,3 +297,4 @@ Tracked here as we go, summarised in the README at the end.
 - 2026-05-13 — Pre-build governance docs (`docs/conventions.md`, `CLAUDE.md`, `CHANGELOG.md`, this file): drafted by Claude (Opus 4.7) in this session, based on the user's spoken guidelines + the existing `docs/` foundation. User reviewed and iterated on the guideline list before writing started; structure and rule-set is collaborative, prose is Claude's.
 - 2026-05-13 — Phase 1 implementation (backend foundations, frontend scaffold, infra, `/health` tracer): generated by Claude in this session under direct user instruction. The user approved the scope; Claude wrote the code without dispatching a subagent (user's explicit override of the standard workflow — Phase 1 was mechanical scaffolding). Bugs surfaced + fixed in-session: N818 lint, Windows tempdir cleanup, Vite TS inference on the API client, missing `@types/node`.
 - 2026-05-13 — Phase 2 implementation (universal schema, RowSink, ShopifyConnector): executed by Claude Sonnet 4.6 as a coder subagent dispatched per the `superpowers:subagent-driven-development` workflow. Followed plan top-to-bottom, TDD per task. Issues surfaced + resolved in-session: ruff F821 + mypy name-defined for forward-reference RowSink in Task 4 (dual-suppress bridge, cleaned up in Task 5); ruff I001 import sort in test_tables.py (auto-fixed); mypy `dict` → `dict[str, Any]` in test_order.py; ruff RUF059 unused unpacked variable (prefixed with `_`); ruff I001 + format in test_mapper.py (typed fixture annotation).
+- 2026-05-14 — Phase 5 implementation (chat layer + citation contract): executed by Claude Sonnet 4.6 as a coder subagent. Key adjustments vs. plan: (1) `ToolReturnPart` imported from public `pydantic_ai.messages` not private `_agent_graph._messages`; (2) `TestModel(call_tools=[...])` added to control tool invocation in agent tests — plan assumed `custom_output_args` would skip tools, but pydantic-ai 1.96.0 defaults to calling all tools; (3) `GroundedAnswer` kept without `extra="forbid"` to avoid structured-output schema conflicts; (4) regex pattern restructured into `_ENTITY_NOUNS` constant to avoid line-length violation in VERBOSE regex comments; (5) `₹` in test strings replaced with `Rs.` for Windows terminal encoding compatibility in test assertions (enforcer regex handles both).

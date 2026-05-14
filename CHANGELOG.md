@@ -19,6 +19,26 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-14 — Phase 5: chat layer with citation contract (backend)
+
+**What changed:** Backend chat surface live. New `apps/api/src/munim/chat/` package: `RowCitation` + `ToolResult` + `GroundedAnswer` + `AnsweredQuestion` types; the fail-closed citation enforcer that strips any numeric claim not immediately followed by `[cite:row_id]` markers; typed tools (`query_orders`, `compute_metric`, `propose_action`) backed by real `record` rows; the PydanticAI agent orchestrator (OpenAI gpt-4o-mini default, override via `OPENAI_CHAT_MODEL` env) with the citation-contract system prompt and `GroundedAnswer` structured output. New `modules/chat/` exposes `POST /chat/messages`. All tests use PydanticAI's `TestModel` for the LLM — zero real OpenAI calls in CI; one optional env-gated live test for the operator.
+
+**The citation contract has 4 layers, all in place:**
+1. Tool return shape — every tool returns `ToolResult{data, citations}`.
+2. System prompt — explicit instruction to wrap every number in `[cite:N]`.
+3. Structured output — `GroundedAnswer` forces the model into `{text, used_citations}`.
+4. Fail-closed post-processor — uncited numbers stripped, hallucinated row ids reject the answer.
+
+**Test count:** 95 → 126 (+31 new): 6 types + 13 enforcer + 8 tools + 2 agent + 2 router. Every enforcer test pins a specific LLM hallucination class.
+
+**PydanticAI version installed:** 1.96.0 (the plan was written for >=0.4; 1.96.0 is the latest stable and is backward-compatible with the plan's API surface with one adjustment — `ToolReturnPart` imported from public `pydantic_ai.messages`, not the private `_agent_graph._messages`). `TestModel(call_tools=[...])` controls which tools the mock model invokes; `custom_output_args=GroundedAnswer(...)` returns the canned structured output.
+
+**Files touched:** `apps/api/src/munim/chat/{types,enforcer,tools,agent}.py` + tests; `apps/api/src/munim/modules/chat/{schemas,service,router}.py` + tests; `apps/api/src/munim/shared/{config,constants}.py`; `apps/api/pyproject.toml` (pydantic-ai); `.env.example`; `apps/api/src/munim/main.py` (router register).
+
+**Reverts cleanly?:** yes — drop the new packages, revert the modified ones, drop the dep.
+
+---
+
 ## 2026-05-14 — Phase 4: real Shopify OAuth + Admin API
 
 **What changed:** Replaced the Shopify connector's OAuth + Admin API stubs with the real flow. `shared/crypto.py` adds AES-GCM encryption (for the access token in `connector_credentials.auth_blob_encrypted`), HMAC-signed state tokens (so we don't need a `oauth_state` table), and Shopify-style HMAC callback verification. `modules/connectors/oauth_shopify.py` adds the Shopify-specific OAuth helpers — `build_shopify_authorize_url` and `exchange_shopify_code`. New endpoints `POST /api/connectors/shopify/oauth/init` and `GET /api/connectors/shopify/oauth/callback` close the loop with a 303 redirect back to `/connectors?connected=shopify`. `ShopifyClient.iter_orders` now has a real path with the `X-Shopify-Access-Token` header, `Link`-header cursor pagination, and 429 retry honouring `Retry-After`. Frontend gains "Connect to your store" alongside "Connect (demo)" on the Shopify card, plus a modal asking for the shop subdomain and a banner showing post-OAuth success.
