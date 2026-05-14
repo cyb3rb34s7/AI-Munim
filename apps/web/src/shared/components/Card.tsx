@@ -10,11 +10,11 @@ interface CardProps {
 export function Card({ title, trailing, children, className }: CardProps) {
   return (
     <section
-      className={`rounded-lg border border-border bg-bg-subtle/30 p-6 ${className ?? ''}`.trim()}
+      className={`rounded-lg border border-border bg-surface p-6 shadow-sm ${className ?? ''}`.trim()}
     >
       {(title || trailing) && (
-        <header className="mb-4 flex items-center justify-between">
-          {title && <h2 className="text-base font-medium">{title}</h2>}
+        <header className="mb-4 flex items-center justify-between gap-2">
+          {title && <h2 className="text-base font-semibold tracking-tight text-fg">{title}</h2>}
           {trailing}
         </header>
       )}

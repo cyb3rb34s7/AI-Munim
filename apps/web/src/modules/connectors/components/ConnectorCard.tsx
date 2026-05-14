@@ -49,9 +49,9 @@ export function ConnectorCard({
     >
       <div className="space-y-4 text-sm">
         <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1">
-          <dt className="text-muted">Orders synced</dt>
+          <dt className="text-fg-muted">Orders synced</dt>
           <dd className="font-mono">{orderCount}</dd>
-          <dt className="text-muted">Last sync</dt>
+          <dt className="text-fg-muted">Last sync</dt>
           <dd className="font-mono">{view.last_sync_at ?? '—'}</dd>
         </dl>
         <div className="flex gap-2">

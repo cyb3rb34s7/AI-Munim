@@ -14,7 +14,7 @@ export function Loader({ label, size = 'md' }: LoaderProps) {
     <div
       role="status"
       aria-live="polite"
-      className="inline-flex items-center gap-2 text-muted"
+      className="inline-flex items-center gap-2 text-fg-muted"
     >
       <span
         className={`${SIZE_CLASS[size]} animate-spin rounded-full border-current border-r-transparent`}

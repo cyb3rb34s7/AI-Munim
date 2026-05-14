@@ -8,9 +8,9 @@ interface StatusBadgeProps {
 const TONE_CLASS = {
   success: 'bg-success/15 text-success border-success/30',
   warning: 'bg-warning/15 text-warning border-warning/40',
-  error: 'bg-error/15 text-error border-error/30',
-  muted: 'bg-bg-subtle text-muted border-border',
-  accent: 'bg-accent/15 text-accent border-accent/30',
+  error: 'bg-destructive/15 text-destructive border-destructive/30',
+  muted: 'bg-surface-subtle text-fg-muted border-border',
+  accent: 'bg-accent text-accent-fg border-transparent',
 } as const;
 
 export function StatusBadge({ tone, children }: StatusBadgeProps) {

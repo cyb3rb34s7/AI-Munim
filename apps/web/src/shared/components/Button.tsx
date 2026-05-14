@@ -7,9 +7,9 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANT_CLASS = {
-  primary: 'bg-primary text-primary-fg hover:opacity-90 disabled:opacity-50',
-  secondary: 'border border-border bg-bg-subtle text-fg hover:bg-bg-subtle/70',
-  ghost: 'text-fg hover:bg-bg-subtle',
+  primary: 'bg-primary text-primary-fg shadow-sm hover:bg-primary-hover',
+  secondary: 'border border-border bg-surface-elevated text-fg hover:bg-surface-subtle',
+  ghost: 'text-fg hover:bg-surface-elevated',
 } as const;
 
 export function Button({
@@ -25,7 +25,7 @@ export function Button({
     <button
       {...rest}
       disabled={isDisabled}
-      className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed ${VARIANT_CLASS[variant]} ${className ?? ''}`.trim()}
+      className={`inline-flex items-center gap-2 rounded-md px-4 h-10 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${VARIANT_CLASS[variant]} ${className ?? ''}`.trim()}
     >
       {loading && (
         <span

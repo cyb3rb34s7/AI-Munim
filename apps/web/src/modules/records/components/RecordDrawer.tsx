@@ -11,12 +11,12 @@ interface RecordDrawerProps {
 
 export function RecordDrawer({ record, isLoading, error, onClose }: RecordDrawerProps) {
   return (
-    <aside className="fixed inset-y-0 right-0 w-[600px] max-w-[90vw] overflow-y-auto border-l border-border bg-bg shadow-xl">
+    <aside className="fixed inset-y-0 right-0 z-40 w-[600px] max-w-[90vw] overflow-y-auto border-l border-border bg-surface shadow-xl">
       <header className="flex items-center justify-between border-b border-border px-6 py-3">
         <div>
-          <h3 className="text-base font-semibold">Record detail</h3>
+          <h3 className="text-base font-semibold text-fg">Record detail</h3>
           {record && (
-            <p className="font-mono text-xs text-muted">
+            <p className="font-mono text-xs text-fg-muted">
               {record.source_system} · {record.source_id}
             </p>
           )}
@@ -27,24 +27,26 @@ export function RecordDrawer({ record, isLoading, error, onClose }: RecordDrawer
       </header>
       <div className="space-y-6 px-6 py-4">
         {isLoading && <Loader label="Loading record…" />}
-        {error && <p className="text-sm text-error">{error.message}</p>}
+        {error && <p className="text-sm text-destructive">{error.message}</p>}
         {record && (
           <>
             <section>
-              <h4 className="text-xs font-semibold uppercase text-muted">Normalized</h4>
-              <pre className="mt-2 overflow-x-auto rounded-md bg-bg-subtle p-3 text-xs">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
+                Normalized
+              </h4>
+              <pre className="mt-2 overflow-x-auto rounded-md bg-surface-subtle p-3 text-xs text-fg">
                 {JSON.stringify(record.normalized, null, 2)}
               </pre>
             </section>
             <section>
-              <h4 className="text-xs font-semibold uppercase text-muted">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
                 Raw (provenance — exact Shopify payload)
               </h4>
-              <pre className="mt-2 overflow-x-auto rounded-md bg-bg-subtle p-3 text-xs">
+              <pre className="mt-2 overflow-x-auto rounded-md bg-surface-subtle p-3 text-xs text-fg">
                 {JSON.stringify(record.raw, null, 2)}
               </pre>
             </section>
-            <section className="text-xs text-muted">
+            <section className="text-xs text-fg-muted">
               <p>
                 <span className="font-mono">payload_hash:</span> {record.payload_hash}
               </p>

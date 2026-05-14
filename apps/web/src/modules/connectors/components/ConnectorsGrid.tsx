@@ -29,7 +29,7 @@ export function ConnectorsGrid({
   if (isLoading) return <Loader label="Loading connectors…" />;
   if (error) {
     return (
-      <div className="rounded-md border border-error/30 bg-error/10 p-4 text-sm text-error">
+      <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
         <p className="font-medium">Could not load connectors</p>
         <p className="mt-1 font-mono text-xs">{error.message}</p>
       </div>

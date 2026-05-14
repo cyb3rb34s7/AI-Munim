@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
 
+import { fadeUp } from '@/shared/utils/motion';
 import { useConnectMutation } from '../hooks/useConnectMutation';
 import { useConnectors } from '../hooks/useConnectors';
 import { useStartOAuthMutation } from '../hooks/useStartOAuthMutation';
@@ -58,10 +60,15 @@ export function ConnectorsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <motion.div
+      variants={fadeUp}
+      initial="hidden"
+      animate="visible"
+      className="mx-auto max-w-5xl space-y-6 p-8"
+    >
       <section>
-        <h2 className="text-lg font-semibold">Connectors</h2>
-        <p className="mt-1 text-sm text-muted">
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">Connectors</h1>
+        <p className="mt-1 text-sm text-fg-muted">
           Three connectors behind one abstraction. Use <em>Connect (demo)</em> to load a frozen
           fixture, or <em>Connect to your store</em> to authenticate against your real Shopify shop.
         </p>
@@ -92,7 +99,7 @@ export function ConnectorsPage() {
           <p className="font-medium text-success">
             Sync complete: {lastSync.rows_upserted} upserted, {lastSync.rows_skipped} unchanged.
           </p>
-          <p className="mt-1 text-xs text-muted">
+          <p className="mt-1 text-xs text-fg-muted">
             Open the Records tab to inspect the rows + their original Shopify payloads.
           </p>
         </div>
@@ -106,6 +113,6 @@ export function ConnectorsPage() {
         onSubmit={handleOAuthSubmit}
         onClose={() => setModalForName(null)}
       />
-    </div>
+    </motion.div>
   );
 }
