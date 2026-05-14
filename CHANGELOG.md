@@ -19,6 +19,18 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-14 — Phase 4: real Shopify OAuth + Admin API
+
+**What changed:** Replaced the Shopify connector's OAuth + Admin API stubs with the real flow. `shared/crypto.py` adds AES-GCM encryption (for the access token in `connector_credentials.auth_blob_encrypted`), HMAC-signed state tokens (so we don't need a `oauth_state` table), and Shopify-style HMAC callback verification. `modules/connectors/oauth_shopify.py` adds the Shopify-specific OAuth helpers — `build_shopify_authorize_url` and `exchange_shopify_code`. New endpoints `POST /api/connectors/shopify/oauth/init` and `GET /api/connectors/shopify/oauth/callback` close the loop with a 303 redirect back to `/connectors?connected=shopify`. `ShopifyClient.iter_orders` now has a real path with the `X-Shopify-Access-Token` header, `Link`-header cursor pagination, and 429 retry honouring `Retry-After`. Frontend gains "Connect to your store" alongside "Connect (demo)" on the Shopify card, plus a modal asking for the shop subdomain and a banner showing post-OAuth success.
+
+**Refactor:** `BaseConnector` ABC dropped `authorize_url` and `exchange_code` — OAuth shapes vary per provider and forcing a uniform ABC would create Liskov violations. Each provider's OAuth lives in its own `oauth_<name>.py`.
+
+**Files touched:** `apps/api/src/munim/shared/crypto.py` (+ tests), `apps/api/src/munim/modules/connectors/oauth_shopify.py` (+ tests), `apps/api/src/munim/modules/connectors/{service,router,schemas}.py`, `apps/api/src/munim/connectors/{base.py,shopify/{client,connector}.py}` (+ tests), `apps/api/src/munim/shared/{config,constants}.py`, `apps/api/pyproject.toml` (cryptography + respx), `apps/web/src/modules/connectors/{components/*,hooks/*,api/*,types/*}.ts`.
+
+**Reverts cleanly?:** yes — drop the new files, revert the modified ones. Demo flow still works.
+
+---
+
 ## 2026-05-14 — Phase 3: connectors API + records API + clickable demo UI
 
 **What changed:** Added two new vertical-slice backend modules — `connectors` (list/connect/sync endpoints) and `records` (list/detail) — plus `ConnectorRegistry` so adding Meta Ads / Shiprocket in Phase 4 is one registry entry. Moved the Shopify demo fixture from `tests/fixtures/` to `apps/api/data/fixtures/shopify/` (production demo path). Frontend gained `react-router-dom`, an `AppShell` with nav, and two new vertical-slice modules — `connectors` (Connect / Sync UI per card) and `records` (table + drawer showing raw + normalized side by side). The demo is now clickable: Connect → Sync → Records → row → see provenance.
