@@ -11,6 +11,7 @@ from collections.abc import Mapping
 
 from munim.connectors.base import BaseConnector
 from munim.connectors.meta_ads.connector import MetaAdsConnector
+from munim.connectors.shiprocket.connector import ShiprocketConnector
 from munim.connectors.shopify.connector import ShopifyConnector
 from munim.shared.constants import ConnectorName, ErrorCode
 from munim.shared.errors import MunimError
@@ -44,5 +45,6 @@ def default_registry() -> ConnectorRegistry:
         {
             ConnectorName.SHOPIFY: ShopifyConnector(),
             ConnectorName.META_ADS: MetaAdsConnector(),
+            ConnectorName.SHIPROCKET: ShiprocketConnector(),
         }
     )

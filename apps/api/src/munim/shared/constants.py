@@ -84,6 +84,7 @@ class FulfillmentStatus(StrEnum):
     PENDING = "pending"
     FULFILLED = "fulfilled"
     PARTIAL = "partial"
+    IN_TRANSIT = "in_transit"
     RTO = "rto"
     CANCELLED = "cancelled"
 
