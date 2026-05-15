@@ -19,7 +19,7 @@ export default defineConfig({
       // Dev proxy: /api/* on the frontend forwards to the FastAPI backend.
       // Production deploys hit the API host directly via VITE_API_URL.
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         rewrite: (incoming) => incoming.replace(/^\/api/, ''),
       },

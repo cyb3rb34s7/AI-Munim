@@ -49,6 +49,18 @@ Ranking re-evaluated at the start of each new phase.
 
 Every entry is a paid lesson. Read at the start of every session. Never repeat one.
 
+### 2026-05-15 (Phase 7 live smoke) — Vite proxy `target: 'http://localhost:8000'` resolves to IPv6 (`[::1]:8000`) on Windows; any other service bound to IPv6 8000 wins ahead of our IPv4-only uvicorn
+
+**Problem:** Frontend chat call returned `401 Unauthorized` with `{"code":"AUTH_ERROR","data":null,"error":{"type":"auth_error","traceId":"42d6cc74"},"message":"Authorization header missing"}` — a response envelope that does NOT match our backend (ours is `{ success, error: { code, message, details }, trace_id }`). Backend logs showed zero requests received. Hitting `127.0.0.1:8000/chat/messages` directly returned a clean 200; hitting `localhost:8000/health` returned the wrong service's payload (`{"service":"copytrade-backend"}`).
+
+**Root cause:** On Windows, `localhost` resolves to `::1` (IPv6) first by default. Docker Desktop had a different project's container bound to `[::1]:8000`. Our uvicorn was started with `--host 127.0.0.1` (IPv4 only). Vite's proxy `target: 'http://localhost:8000'` therefore resolved to the Docker container, not our backend. Vite forwarded every `/api/*` request to the wrong service — which returned an auth-required 401 in its own envelope. The error never reached our backend, our logs never showed it, and the frontend's Zod boundary surfaced a `ContractMismatchError` because the wrong service's envelope didn't match ours.
+
+**Solution:** Changed `apps/web/vite.config.ts` proxy `target` from `http://localhost:8000` to `http://127.0.0.1:8000` to force IPv4 resolution. Frontend now hits our backend regardless of what's on `[::1]:8000`.
+
+**Guardrail:** For any `localhost`-bound dev service on Windows, force IPv4 in upstream configs: use `127.0.0.1` explicitly, not `localhost`. The general rule: when binding (`uvicorn --host 127.0.0.1`) and addressing (`target: 'http://localhost:...'`) use different address families, they don't talk. If our uvicorn ran on `0.0.0.0` (binding both v4 and v6), it could have shared `[::1]:8000` with Docker — but the OS-level conflict would still pick one process per family. The deterministic answer is "explicit IPv4 in both places, always."
+
+Bonus diagnostic pattern: when a frontend gets an error envelope that doesn't match yours, compare it byte-for-byte against the backend log. If the backend has no record of the request, you are hitting a different backend.
+
 ### 2026-05-15 (Phase 7 review) — copying API contracts from a plan instead of re-reading the actual backend ships broken code that lints + typechecks + builds clean
 
 **Problem:** The Phase 7 plan I (planner) wrote had the wrong frontend Zod schema for the chat endpoint baked into its code blocks: request body `{ prompt }` instead of `{ message }`; response shape `{ text, used_citations, available_citations }` with `id` on each citation, instead of the actual `{ text, citations }` with `record_id`. The implementer subagent copied the plan verbatim. Build was green, lint was green, typecheck was green. The boundary validator would have thrown `ContractMismatchError` on every chat call — but no live smoke ran during implementation, so it landed undiscovered until the reviewer caught it by reading the backend's `apps/api/src/munim/modules/chat/schemas.py` and comparing.
