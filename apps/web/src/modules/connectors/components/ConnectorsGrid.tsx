@@ -7,10 +7,8 @@ interface ConnectorsGridProps {
   connectors: ConnectorView[] | undefined;
   isLoading: boolean;
   error: Error | null;
-  connectingName: ConnectorName | null;
   syncingName: ConnectorName | null;
   startingOAuthName: ConnectorName | null;
-  onConnect: (name: ConnectorName) => void;
   onConnectReal: (name: ConnectorName) => void;
   onSync: (name: ConnectorName) => void;
 }
@@ -19,10 +17,8 @@ export function ConnectorsGrid({
   connectors,
   isLoading,
   error,
-  connectingName,
   syncingName,
   startingOAuthName,
-  onConnect,
   onConnectReal,
   onSync,
 }: ConnectorsGridProps) {
@@ -43,10 +39,8 @@ export function ConnectorsGrid({
         <ConnectorCard
           key={view.name}
           view={view}
-          connecting={connectingName === view.name}
           syncing={syncingName === view.name}
           startingOAuth={startingOAuthName === view.name}
-          onConnect={onConnect}
           onConnectReal={onConnectReal}
           onSync={onSync}
         />

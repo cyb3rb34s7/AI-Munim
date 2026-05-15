@@ -1,13 +1,12 @@
 import { Button, Card, StatusBadge } from '@/shared/components';
 
+import { EnableDemoButton } from './EnableDemoButton';
 import type { ConnectorView, ConnectorName, CredentialStatus } from '../types/connector.types';
 
 interface ConnectorCardProps {
   view: ConnectorView;
-  connecting: boolean;
   syncing: boolean;
   startingOAuth: boolean;
-  onConnect: (name: ConnectorName) => void;
   onConnectReal: (name: ConnectorName) => void;
   onSync: (name: ConnectorName) => void;
 }
@@ -26,48 +25,57 @@ const LABELS: Record<ConnectorName, string> = {
 
 export function ConnectorCard({
   view,
-  connecting,
   syncing,
   startingOAuth,
-  onConnect,
   onConnectReal,
   onSync,
 }: ConnectorCardProps) {
   const isConnected = view.status !== null;
   const orderCount = view.record_counts.find((c) => c.entity_type === 'order')?.count ?? 0;
+  const shipmentCount = view.record_counts.find((c) => c.entity_type === 'shipment')?.count ?? 0;
+  const adSpendCount = view.record_counts.find((c) => c.entity_type === 'ad_spend')?.count ?? 0;
+  const primaryCount = view.is_demo
+    ? view.name === 'shiprocket'
+      ? shipmentCount
+      : adSpendCount
+    : orderCount;
+  const primaryLabel = view.is_demo
+    ? view.name === 'shiprocket'
+      ? 'Shipments synced'
+      : 'Ad-spend rows synced'
+    : 'Orders synced';
 
   return (
     <Card
       title={LABELS[view.name as ConnectorName] ?? view.name}
       trailing={
-        view.status ? (
-          <StatusBadge tone={STATUS_TONE[view.status]}>{view.status}</StatusBadge>
-        ) : (
-          <StatusBadge tone="muted">not connected</StatusBadge>
-        )
+        <div className="flex items-center gap-2">
+          {view.is_demo && <StatusBadge tone="muted">demo</StatusBadge>}
+          {view.status ? (
+            <StatusBadge tone={STATUS_TONE[view.status]}>{view.status}</StatusBadge>
+          ) : (
+            <StatusBadge tone="muted">not connected</StatusBadge>
+          )}
+        </div>
       }
     >
       <div className="space-y-4 text-sm">
         <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1">
-          <dt className="text-fg-muted">Orders synced</dt>
-          <dd className="font-mono">{orderCount}</dd>
+          <dt className="text-fg-muted">{primaryLabel}</dt>
+          <dd className="font-mono">{primaryCount}</dd>
           <dt className="text-fg-muted">Last sync</dt>
           <dd className="font-mono">{view.last_sync_at ?? '—'}</dd>
         </dl>
-        <div className="flex gap-2">
-          {!isConnected && (
-            <>
-              <Button onClick={() => onConnect(view.name as ConnectorName)} loading={connecting}>
-                Connect (demo)
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => onConnectReal(view.name as ConnectorName)}
-                loading={startingOAuth}
-              >
-                Connect to your store
-              </Button>
-            </>
+        <div className="flex flex-wrap gap-2">
+          {!isConnected && view.is_demo && <EnableDemoButton connectorName={view.name} />}
+          {!isConnected && !view.is_demo && (
+            <Button
+              variant="primary"
+              onClick={() => onConnectReal(view.name as ConnectorName)}
+              loading={startingOAuth}
+            >
+              Connect to your store
+            </Button>
           )}
           {isConnected && (
             <Button

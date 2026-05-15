@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 
 import { fadeUp } from '@/shared/utils/motion';
-import { useConnectMutation } from '../hooks/useConnectMutation';
 import { useConnectors } from '../hooks/useConnectors';
 import { useStartOAuthMutation } from '../hooks/useStartOAuthMutation';
 import { useSyncMutation } from '../hooks/useSyncMutation';
@@ -15,7 +14,6 @@ const DEFAULT_SHOP = 'munim-dev';
 
 export function ConnectorsPage() {
   const { connectors, isLoading, error } = useConnectors();
-  const connect = useConnectMutation();
   const sync = useSyncMutation();
   const startOAuth = useStartOAuthMutation();
 
@@ -36,9 +34,6 @@ export function ConnectorsPage() {
     }
   }, [searchParams, setSearchParams]);
 
-  const handleConnect = (name: ConnectorName) => {
-    connect.mutate(name);
-  };
   const handleConnectReal = (name: ConnectorName) => {
     setModalForName(name);
   };
@@ -69,8 +64,9 @@ export function ConnectorsPage() {
       <section>
         <h1 className="text-2xl font-semibold tracking-tight text-fg">Connectors</h1>
         <p className="mt-1 text-sm text-fg-muted">
-          Three connectors behind one abstraction. Use <em>Connect (demo)</em> to load a frozen
-          fixture, or <em>Connect to your store</em> to authenticate against your real Shopify shop.
+          Three connectors behind one abstraction. Use <em>Connect to your store</em> for real
+          Shopify OAuth, or <em>Enable demo data</em> on Meta Ads + Shiprocket to load frozen
+          fixtures.
         </p>
       </section>
 
@@ -86,10 +82,8 @@ export function ConnectorsPage() {
         connectors={connectors}
         isLoading={isLoading}
         error={error}
-        connectingName={connect.isPending ? (connect.variables ?? null) : null}
         syncingName={sync.isPending ? (sync.variables ?? null) : null}
         startingOAuthName={startOAuth.isPending ? modalForName : null}
-        onConnect={handleConnect}
         onConnectReal={handleConnectReal}
         onSync={handleSync}
       />

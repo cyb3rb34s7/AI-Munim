@@ -22,6 +22,7 @@ export const entityCountSchema = z.object({
 export const connectorViewSchema = z.object({
   name: z.enum(['shopify', 'meta_ads', 'shiprocket']),
   status: z.enum(['connected', 'demo', 'error']).nullable(),
+  is_demo: z.boolean(),
   last_sync_at: z.string().nullable(),
   record_counts: z.array(entityCountSchema),
 });

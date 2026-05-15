@@ -22,6 +22,10 @@ export function postConnect(name: ConnectorName): Promise<ApiResponse<ConnectRes
   return apiPost(`/connectors/${name}/connect`, connectResponseSchema);
 }
 
+export function postConnectDemo(name: ConnectorName): Promise<ApiResponse<ConnectResponse>> {
+  return apiPost(`/connectors/${name}/connect-demo`, connectResponseSchema);
+}
+
 export function postSync(name: ConnectorName): Promise<ApiResponse<SyncResponse>> {
   return apiPost(`/connectors/${name}/sync`, syncResponseSchema);
 }
