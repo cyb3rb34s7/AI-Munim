@@ -19,6 +19,36 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-15 — Phase 8: Meta Ads + Shiprocket demo connectors
+
+**What changed:** Brought the project to three connectors behind one `BaseConnector` ABC (the brief's hard requirement) by adding Meta Ads and Shiprocket as demo-mode connectors alongside the real Shopify OAuth path. Curated Shiprocket shipment fixture so the RTO agent's customer-history signal fires meaningfully on the demo (high-RTO customer A → `convert_to_prepaid`, clean customer B → `no_action`). Rewired `customer_rto_rate` to read shipments instead of orders (orders never carry `fulfillment_status` — that's a shipment lifecycle attribute), and migrated the Shopify mapper's `customer_source_id` from raw Shopify ID to SHA-256(email||phone) so the cross-connector join works.
+
+- **Backend connector packages:**
+  - `connectors/meta_ads/` — `mapper.py` (raw Meta `/insights` row → typed `MetaAdSpend`), `connector.py` (`MetaAdsConnector(BaseConnector)`, `is_demo=True`, 200 ms sleep), `fixtures/insights.json` (40 rows = 4 D2C-realistic campaigns × 10 days; spend distribution skewed by funnel stage; CTR/CPM/ROAS plausible).
+  - `connectors/shiprocket/` — `mapper.py` (raw Shiprocket `/v1/external/orders` row → typed `Shipment` with IST-naive `created_at` → UTC conversion at the boundary, status enum sweep, customer-hash), `connector.py` (`ShiprocketConnector(BaseConnector)`, `is_demo=True`, 200 ms sleep), `fixtures/shipments.json` (50 rows: customer A 3 RTO + 2 DELIVERED, customer B 5 DELIVERED, customer C 1 RTO + 4 DELIVERED, ~35 scatter rows).
+- **`BaseConnector.is_demo`** — new ClassVar; defaults False, both new connectors override True. Threaded through `ConnectorView.is_demo` on the API response.
+- **`POST /connectors/{name}/connect-demo`** — generic demo-connect endpoint. Validates connector exists and `is_demo`, upserts credentials row with `status=DEMO` and empty blob, returns the view. Wrong-connector cases: `connector.unknown` (404) for unknown name, `connector.not_demo` (400) for Shopify and any future non-demo connector. New `ErrorCode.CONNECTOR_NOT_DEMO` registered + raised.
+- **RTO agent rewire** — `customer_rto_rate` now queries `record` where `source_system=shiprocket` and `entity_type=shipment`. Joins on `customer_source_id`. The Shopify mapper hashes `customer.email` (preferred) or `customer.phone` (fallback) with the same algorithm as the Shiprocket mapper so the same human matches across both. `customer_source_id` becomes None for guest checkouts with no email + no phone (existing test covered this; still works).
+- **Frontend** — Zod schema picks up `is_demo`. `useConnectDemoMutation` + `EnableDemoButton` (toasts "Demo data enabled for {name} — click Sync to load"). `ConnectorCard` branches: real connector + not connected → existing "Connect to your store" OAuth button; demo connector + not connected → `EnableDemoButton`; either + connected → existing "Sync now". "demo" badge surfaces alongside the status badge so the UI is honest about which connector is fixture-backed. Per-row count label adapts: shipments for Shiprocket, ad-spend for Meta, orders for Shopify.
+
+**Why:** The brief's hard requirement is ≥3 connectors behind one abstraction; Shopify alone wasn't going to land that. Meta and Shiprocket as demo-mode is the honest scope call (Shiprocket has no public sandbox, Meta's OAuth would burn 30-60 min of reviewer setup with zero payoff if the eval account has no spend). Real-mode swap is mechanical: replace `_load_fixture` with HTTP-calling iterators, no abstraction change. The RTO agent rewire fixes a pre-existing latent bug — order rows never carry `fulfillment_status` (because fulfillment is a shipment attribute), so the customer-history signal silently returned the population baseline for every customer in Phase 6. With Shiprocket data + the rewire, the signal now does what it was designed to do.
+
+**Files touched:**
+- `apps/api/src/munim/connectors/{meta_ads,shiprocket}/**` (new)
+- `apps/api/src/munim/connectors/base.py` (`is_demo`)
+- `apps/api/src/munim/connectors/registry.py` (register new connectors)
+- `apps/api/src/munim/connectors/shopify/mapper.py` (`_extract_customer_id` → SHA-256 hash)
+- `apps/api/src/munim/modules/connectors/{demo_connect.py,router.py,service.py,schemas.py}` (new endpoint + `is_demo` field)
+- `apps/api/src/munim/agents/rto_mitigator/signals.py` (`customer_rto_rate` reads shipments)
+- `apps/api/src/munim/shared/constants.py` (`ErrorCode.CONNECTOR_NOT_DEMO`, `FulfillmentStatus.IN_TRANSIT`)
+- `apps/web/src/modules/connectors/**` (Zod schema, `useConnectDemoMutation`, `EnableDemoButton`, `ConnectorCard` branch)
+
+**Reverts cleanly?:** Yes — purely additive on the backend (the Shopify mapper customer-id change is the only behavioural diff, and the schema is backward-compatible). Removing the new connectors is one `registry.py` line and one folder per side. Frontend is a clean module update.
+
+**Test counts:** 168 → 206 backend tests (+38). `pnpm typecheck && pnpm lint && pnpm build` all green.
+
+---
+
 ## 2026-05-15 — Phase 7 review fixes
 
 **What changed:** Reviewer subagent surfaced 4 CRITICAL + 9 IMPORTANT findings; all addressed.
