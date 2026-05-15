@@ -66,6 +66,14 @@ class ConnectorSyncError(MunimError):
     message = "Sync failed."
 
 
+class LegacyConnectRejectedError(MunimError):
+    code = ErrorCode.CONNECTOR_NOT_DEMO.value
+    http_status = 400
+    message = (
+        "This connector uses the demo-mode path; POST /connectors/{name}/connect-demo instead."
+    )
+
+
 class CredentialUnreadableError(MunimError):
     """The stored credential blob could not be decrypted or parsed.
 
@@ -94,7 +102,22 @@ def connect_demo(
     name: ConnectorName,
     registry: ConnectorRegistry,
 ) -> ConnectorView:
-    """Create or update a demo credential for `name`. Idempotent."""
+    """Create or update a demo credential for `name`. Idempotent.
+
+    Phase 8 demo connectors (those with `is_demo=True`) must use the dedicated
+    `/connect-demo` endpoint — they read fixtures from their own package, not
+    from `data/fixtures/{name}/orders.json`. Routing them through this legacy
+    helper would write a credential with a bogus fixture_path.
+    """
+    connector = registry.get(name)
+    if connector.is_demo:
+        raise LegacyConnectRejectedError(
+            message=(
+                f"Connector {name.value!r} is a Phase 8 demo connector; "
+                f"use POST /connectors/{name.value}/connect-demo instead."
+            ),
+            details={"connector": name.value, "use_endpoint": "/connect-demo"},
+        )
     fixture_path = _resolve_demo_fixture_path(name)
     blob = {"status": CredentialStatus.DEMO.value, "fixture_path": str(fixture_path)}
 

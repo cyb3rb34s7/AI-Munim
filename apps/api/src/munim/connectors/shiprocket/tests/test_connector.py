@@ -4,7 +4,6 @@ from sqlmodel import Session, select
 from munim.connectors._row_sink import RowSink
 from munim.connectors.base import Credential, SyncContext
 from munim.connectors.shiprocket.connector import ShiprocketConnector
-from munim.connectors.shiprocket.mapper import compute_customer_source_id
 from munim.models import Record
 from munim.shared.constants import (
     ConnectorName,
@@ -13,6 +12,7 @@ from munim.shared.constants import (
     FulfillmentStatus,
     SourceSystem,
 )
+from munim.shared.utils.customer_hash import compute_customer_source_id
 
 DEFAULT_MERCHANT_ID = "m_default"
 
@@ -99,3 +99,26 @@ async def test_customer_b_has_clean_record(session: Session) -> None:
         r.normalized.get("fulfillment_status") == FulfillmentStatus.FULFILLED.value
         for r in customer_rows
     )
+
+
+async def test_customer_c_has_one_rto_four_delivered(session: Session) -> None:
+    await _run_sync(session)
+    customer_c_hash = compute_customer_source_id("amit@example.com", None)
+
+    rows = session.exec(
+        select(Record).where(Record.source_system == SourceSystem.SHIPROCKET.value)
+    ).all()
+    customer_rows = [r for r in rows if r.normalized.get("customer_source_id") == customer_c_hash]
+    assert len(customer_rows) == 5
+    rto = [
+        r
+        for r in customer_rows
+        if r.normalized.get("fulfillment_status") == FulfillmentStatus.RTO.value
+    ]
+    fulfilled = [
+        r
+        for r in customer_rows
+        if r.normalized.get("fulfillment_status") == FulfillmentStatus.FULFILLED.value
+    ]
+    assert len(rto) == 1
+    assert len(fulfilled) == 4

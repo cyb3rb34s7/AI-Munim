@@ -38,7 +38,7 @@ class MetaAdSpend(BaseModel):
     impressions: int
     clicks: int
     ctr: float
-    cpm: float
+    cpm_inr: Decimal
     purchases_attributed: int
     add_to_carts_attributed: int
 
@@ -57,6 +57,15 @@ def map_meta_ads_insight(raw: dict[str, Any]) -> MetaAdSpend:
     purchases = _extract_action_value(actions, _PURCHASE_ACTION)
     add_to_carts = _extract_action_value(actions, _ADD_TO_CART_ACTION)
 
+    cpm_raw = raw["cpm"]
+    try:
+        cpm_inr = Decimal(str(cpm_raw))
+    except (InvalidOperation, TypeError) as exc:
+        raise UnexpectedSpendValueError(
+            message=f"Could not parse Meta CPM value {cpm_raw!r} as Decimal.",
+            details={"campaign_id": raw.get("campaign_id"), "cpm": cpm_raw},
+        ) from exc
+
     return MetaAdSpend(
         campaign_id=raw["campaign_id"],
         campaign_name=raw["campaign_name"],
@@ -65,7 +74,7 @@ def map_meta_ads_insight(raw: dict[str, Any]) -> MetaAdSpend:
         impressions=int(raw["impressions"]),
         clicks=int(raw["clicks"]),
         ctr=float(raw["ctr"]),
-        cpm=float(raw["cpm"]),
+        cpm_inr=cpm_inr,
         purchases_attributed=purchases,
         add_to_carts_attributed=add_to_carts,
     )

@@ -5,6 +5,7 @@ import pytest
 
 from munim.connectors.shiprocket.mapper import (
     MissingCustomerIdentityError,
+    MissingShipmentFieldError,
     UnknownShipmentStatusError,
     compute_customer_source_id,
     map_shiprocket_shipment,
@@ -66,11 +67,29 @@ def test_ist_naive_created_at_converts_to_utc() -> None:
     assert result.placed_at == datetime(2026, 4, 15, 5, 0, 0, tzinfo=UTC)
 
 
-def test_already_timezone_aware_created_at_raises_to_lock_contract() -> None:
+def test_already_timezone_aware_created_at_converts_normally_to_utc() -> None:
     row = _base_row()
     row["created_at"] = "2026-04-15T10:30:00+05:30"
-    with pytest.raises(ValueError, match="IST-naive"):
+    result = map_shiprocket_shipment(row)
+    assert result.placed_at.tzinfo is UTC
+    assert result.placed_at == datetime(2026, 4, 15, 5, 0, 0, tzinfo=UTC)
+
+
+def test_status_map_is_case_insensitive_against_unannounced_provider_variation() -> None:
+    row = _base_row()
+    row["status"] = "delivered"
+    result = map_shiprocket_shipment(row)
+    assert result.fulfillment_status is FulfillmentStatus.FULFILLED
+
+
+def test_missing_pincode_raises_typed_error() -> None:
+    row = _base_row()
+    row["shipping_address"] = {}
+    with pytest.raises(MissingShipmentFieldError) as exc_info:
         map_shiprocket_shipment(row)
+    assert exc_info.value.code == "validation.missing_field"
+    assert exc_info.value.details is not None
+    assert exc_info.value.details["field"] == "shipping_address.pincode"
 
 
 def test_customer_hash_prefers_email_over_phone() -> None:

@@ -2,16 +2,11 @@
 
 Shiprocket's `created_at` is an IST-naive timestamp ("2026-04-15 10:30:00"),
 not an ISO 8601 string with offset. Per docs/conventions.md §8.2 (UTC on the
-wire, IST at display) and the Phase 6 timezone lesson, we attach IST tzinfo
-explicitly and convert to UTC at the mapper boundary. Reading clock fields
-off the original IST-naive string would silently mis-shift every shipment.
-
-`customer_source_id` is a stable, privacy-preserving SHA-256-truncated hash
-of email (preferred) or phone (fallback) so the same customer joins across
-Shopify orders and Shiprocket shipments without storing PII in the join key.
+wire, IST at display), we attach IST tzinfo explicitly and convert to UTC at
+the mapper boundary. Reading clock fields off the original IST-naive string
+would silently mis-shift every shipment by 5:30.
 """
 
-import hashlib
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -21,9 +16,12 @@ from pydantic import BaseModel, ConfigDict
 
 from munim.shared.constants import ErrorCode, FulfillmentStatus
 from munim.shared.errors import MunimError
+from munim.shared.utils.customer_hash import (
+    MissingCustomerIdentityError,
+    compute_customer_source_id,
+)
 
 _IST = ZoneInfo("Asia/Kolkata")
-_CUSTOMER_HASH_LENGTH = 16
 
 _SHIPROCKET_STATUS_MAP: dict[str, FulfillmentStatus] = {
     "DELIVERED": FulfillmentStatus.FULFILLED,
@@ -35,12 +33,6 @@ _SHIPROCKET_STATUS_MAP: dict[str, FulfillmentStatus] = {
     "CANCELED": FulfillmentStatus.CANCELLED,
     "CANCELLED": FulfillmentStatus.CANCELLED,
 }
-
-
-class MissingCustomerIdentityError(MunimError):
-    code = ErrorCode.VALIDATION_MISSING_FIELD.value
-    http_status = 422
-    message = "Shiprocket row has neither customer_email nor customer_phone."
 
 
 class MissingShipmentFieldError(MunimError):
@@ -94,16 +86,6 @@ def map_shiprocket_shipment(raw: dict[str, Any]) -> Shipment:
     )
 
 
-def compute_customer_source_id(email: str | None, phone: str | None) -> str:
-    seed = (email or "").strip().lower() or (phone or "").strip()
-    if not seed:
-        raise MissingCustomerIdentityError(
-            message="Cannot compute customer_source_id: neither email nor phone present.",
-        )
-    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
-    return digest[:_CUSTOMER_HASH_LENGTH]
-
-
 def _map_status(raw_status: str) -> FulfillmentStatus:
     mapped = _SHIPROCKET_STATUS_MAP.get(raw_status.upper())
     if mapped is None:
@@ -116,13 +98,21 @@ def _map_status(raw_status: str) -> FulfillmentStatus:
 
 def _parse_ist_naive_to_utc(value: str) -> datetime:
     dt = datetime.fromisoformat(value)
-    if dt.tzinfo is not None:
-        raise ValueError(
-            f"Shiprocket created_at {value!r} unexpectedly carries timezone info; "
-            "the public API emits IST-naive timestamps."
-        )
-    return dt.replace(tzinfo=_IST).astimezone(UTC)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=_IST).astimezone(UTC)
+    return dt.astimezone(UTC)
 
 
 def build_source_id(raw: dict[str, Any]) -> str:
     return str(raw["id"])
+
+
+__all__ = [
+    "MissingCustomerIdentityError",
+    "MissingShipmentFieldError",
+    "Shipment",
+    "UnknownShipmentStatusError",
+    "build_source_id",
+    "compute_customer_source_id",
+    "map_shiprocket_shipment",
+]

@@ -1,7 +1,7 @@
 import { Button, Card, StatusBadge } from '@/shared/components';
 
 import { EnableDemoButton } from './EnableDemoButton';
-import type { ConnectorView, ConnectorName, CredentialStatus } from '../types/connector.types';
+import { ConnectorName, type ConnectorView, type CredentialStatus } from '../types/connector.types';
 
 interface ConnectorCardProps {
   view: ConnectorView;
@@ -31,23 +31,24 @@ export function ConnectorCard({
   onSync,
 }: ConnectorCardProps) {
   const isConnected = view.status !== null;
+  const isShiprocket = view.name === ConnectorName.Shiprocket;
   const orderCount = view.record_counts.find((c) => c.entity_type === 'order')?.count ?? 0;
   const shipmentCount = view.record_counts.find((c) => c.entity_type === 'shipment')?.count ?? 0;
   const adSpendCount = view.record_counts.find((c) => c.entity_type === 'ad_spend')?.count ?? 0;
   const primaryCount = view.is_demo
-    ? view.name === 'shiprocket'
+    ? isShiprocket
       ? shipmentCount
       : adSpendCount
     : orderCount;
   const primaryLabel = view.is_demo
-    ? view.name === 'shiprocket'
+    ? isShiprocket
       ? 'Shipments synced'
       : 'Ad-spend rows synced'
     : 'Orders synced';
 
   return (
     <Card
-      title={LABELS[view.name as ConnectorName] ?? view.name}
+      title={LABELS[view.name] ?? view.name}
       trailing={
         <div className="flex items-center gap-2">
           {view.is_demo && <StatusBadge tone="muted">demo</StatusBadge>}
@@ -71,7 +72,7 @@ export function ConnectorCard({
           {!isConnected && !view.is_demo && (
             <Button
               variant="primary"
-              onClick={() => onConnectReal(view.name as ConnectorName)}
+              onClick={() => onConnectReal(view.name)}
               loading={startingOAuth}
             >
               Connect to your store
@@ -80,7 +81,7 @@ export function ConnectorCard({
           {isConnected && (
             <Button
               variant="secondary"
-              onClick={() => onSync(view.name as ConnectorName)}
+              onClick={() => onSync(view.name)}
               loading={syncing}
             >
               Sync now

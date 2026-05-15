@@ -32,10 +32,28 @@ def test_maps_meta_insight_to_decimal_spend_and_int_counts() -> None:
 
     assert isinstance(result.spend_inr, Decimal)
     assert result.spend_inr == Decimal("1245.67")
+    assert isinstance(result.cpm_inr, Decimal)
+    assert result.cpm_inr == Decimal("27.27")
     assert result.impressions == 45678
     assert result.clicks == 892
     assert result.purchases_attributed == 12
     assert result.add_to_carts_attributed == 47
+
+
+def test_cpm_is_decimal_so_rupee_math_never_touches_float() -> None:
+    row = _base_row()
+    row["cpm"] = "0.1"
+    result = map_meta_ads_insight(row)
+    assert isinstance(result.cpm_inr, Decimal)
+    assert result.cpm_inr * Decimal(3) == Decimal("0.3")
+
+
+def test_malformed_cpm_raises_typed_error() -> None:
+    row = _base_row()
+    row["cpm"] = "not-a-number"
+    with pytest.raises(UnexpectedSpendValueError) as exc_info:
+        map_meta_ads_insight(row)
+    assert exc_info.value.code == "validation.bad_format"
 
 
 def test_extracts_action_values_by_action_type_not_position() -> None:

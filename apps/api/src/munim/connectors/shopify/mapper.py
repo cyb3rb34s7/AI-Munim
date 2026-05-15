@@ -18,9 +18,9 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from munim.connectors.shiprocket.mapper import compute_customer_source_id
 from munim.schemas import Order
 from munim.shared.constants import PaymentMethod
+from munim.shared.utils.customer_hash import compute_customer_source_id
 
 # Shopify Admin API constants. Kept as named module-level values rather than
 # inline literals per docs/conventions.md §7 (no magic strings in branches).

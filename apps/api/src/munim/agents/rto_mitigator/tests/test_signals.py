@@ -230,3 +230,19 @@ def test_customer_rto_rate_with_few_shipments_returns_baseline(session: Session)
     assert result.diagnostic["history_count"] == 2
     assert result.diagnostic["confident"] is False
     assert result.score == 0.2
+
+
+def test_customer_rto_rate_saturates_at_one_for_pure_rto_history(session: Session) -> None:
+    for i in range(5):
+        _seed_shipment(
+            session,
+            source_id=f"sat_{i}",
+            customer_source_id="rto_only",
+            fulfillment_status=FulfillmentStatus.RTO.value,
+        )
+    session.commit()
+    result = customer_rto_rate(session, "m_default", "rto_only")
+    assert result.diagnostic["history_count"] == 5
+    assert result.diagnostic["rto_count"] == 5
+    assert result.diagnostic["observed_rate"] == 1.0
+    assert result.score == 1.0

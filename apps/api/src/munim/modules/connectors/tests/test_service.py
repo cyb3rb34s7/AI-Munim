@@ -8,6 +8,7 @@ from munim.connectors.registry import ConnectorRegistry, default_registry
 from munim.modules.connectors.service import (
     ConnectorNotConnectedError,
     ConnectorSyncError,
+    LegacyConnectRejectedError,
     connect_demo,
     list_connectors,
     sync_connector,
@@ -48,6 +49,14 @@ def test_connect_demo_creates_credential_with_demo_status(
     view = connect_demo(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY, default_registry())
     session.commit()
     assert view.status is CredentialStatus.DEMO
+
+
+def test_legacy_connect_rejects_phase_8_demo_connectors(session: Session) -> None:
+    registry = default_registry()
+    with pytest.raises(LegacyConnectRejectedError) as exc_info:
+        connect_demo(session, DEFAULT_MERCHANT_ID, ConnectorName.META_ADS, registry)
+    assert exc_info.value.code == "connector.not_demo"
+    assert exc_info.value.http_status == 400
 
 
 def test_connect_demo_is_idempotent_on_repeated_call(
