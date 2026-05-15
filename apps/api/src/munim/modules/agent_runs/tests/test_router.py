@@ -86,21 +86,21 @@ def test_get_agent_run_returns_decisions(client: TestClient) -> None:
         for i in range(3):
             row = Record(
                 merchant_id="m_default",
-                source_system=SourceSystem.SHOPIFY.value,
+                source_system=SourceSystem.SHIPROCKET.value,
                 source_id=f"hist_rto_{i}",
-                entity_type=EntityType.ORDER.value,
+                entity_type=EntityType.SHIPMENT.value,
                 fetched_at=datetime.now(UTC),
                 payload_hash=f"h_hist_rto_{i}",
                 raw={"id": f"hist_rto_{i}"},
                 normalized={
-                    "placed_at": "2026-05-08T12:00:00+05:30",
-                    "total_inr": "1000",
-                    "currency": "INR",
-                    "payment_method": PaymentMethod.COD.value,
-                    "financial_status": "pending",
-                    "fulfillment_status": FulfillmentStatus.RTO.value,
-                    "pincode": "110001",
                     "customer_source_id": "cust_x",
+                    "fulfillment_status": FulfillmentStatus.RTO.value,
+                    "channel_order_id": f"hist_rto_{i}",
+                    "awb_code": f"AWB_{i}",
+                    "courier_name": "Test Courier",
+                    "total_inr": "1000.00",
+                    "placed_at": "2026-05-01T05:00:00+00:00",
+                    "pincode": "110001",
                 },
             )
             s.add(row)

@@ -7,12 +7,18 @@ A malformed order (missing required field, unparseable date, missing tz info,
 etc.) raises; the caller decides whether to fail the whole sync or skip the
 row. The ShopifyConnector currently lets exceptions propagate (no silent
 fallbacks, per docs/conventions.md §10).
+
+`customer_source_id` is a privacy-preserving SHA-256-truncated hash of email
+(preferred) or phone (fallback) — the same algorithm Shiprocket's mapper
+uses — so cross-connector queries (RTO agent's `customer_rto_rate` joining
+orders to shipments) can match the same customer without PII in the join key.
 """
 
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
+from munim.connectors.shiprocket.mapper import compute_customer_source_id
 from munim.schemas import Order
 from munim.shared.constants import PaymentMethod
 
@@ -71,5 +77,8 @@ def _extract_pincode(raw: dict[str, Any]) -> str | None:
 
 def _extract_customer_id(raw: dict[str, Any]) -> str | None:
     customer = raw.get("customer") or {}
-    cid = customer.get("id")
-    return str(cid) if cid is not None else None
+    email = customer.get("email")
+    phone = customer.get("phone")
+    if not email and not phone:
+        return None
+    return compute_customer_source_id(email, phone)

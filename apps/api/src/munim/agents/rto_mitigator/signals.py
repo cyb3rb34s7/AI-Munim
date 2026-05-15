@@ -100,8 +100,8 @@ def customer_rto_rate(
     rows = session.exec(
         select(Record)
         .where(Record.merchant_id == merchant_id)
-        .where(Record.source_system == SourceSystem.SHOPIFY.value)
-        .where(Record.entity_type == EntityType.ORDER.value)
+        .where(Record.source_system == SourceSystem.SHIPROCKET.value)
+        .where(Record.entity_type == EntityType.SHIPMENT.value)
     ).all()
     customer_rows = [
         r for r in rows if r.normalized.get("customer_source_id") == customer_source_id

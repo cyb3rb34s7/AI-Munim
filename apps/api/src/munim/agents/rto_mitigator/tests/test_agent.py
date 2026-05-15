@@ -50,6 +50,37 @@ def _seed_order(
     return row
 
 
+def _seed_shipment(
+    session: Session,
+    *,
+    source_id: str,
+    customer_source_id: str,
+    fulfillment_status: str,
+) -> Record:
+    row = Record(
+        merchant_id="m_default",
+        source_system=SourceSystem.SHIPROCKET.value,
+        source_id=source_id,
+        entity_type=EntityType.SHIPMENT.value,
+        fetched_at=datetime.now(UTC),
+        payload_hash=f"h_{source_id}",
+        raw={"id": source_id},
+        normalized={
+            "customer_source_id": customer_source_id,
+            "fulfillment_status": fulfillment_status,
+            "channel_order_id": source_id,
+            "awb_code": f"AWB_{source_id}",
+            "courier_name": "Test Courier",
+            "total_inr": "1000.00",
+            "placed_at": "2026-05-01T05:00:00+00:00",
+            "pincode": "110001",
+        },
+    )
+    session.add(row)
+    session.flush()
+    return row
+
+
 def test_agent_only_scores_cod_orders(session: Session) -> None:
     cod = _seed_order(session, source_id="cod_1", payment_method=PaymentMethod.COD)
     _seed_order(session, source_id="prepaid_1", payment_method=PaymentMethod.PREPAID)
@@ -99,15 +130,12 @@ def test_agent_decision_includes_signal_scores_and_weights(session: Session) -> 
 
 def test_agent_proposes_convert_for_high_risk_cod_order(session: Session) -> None:
     for i in range(3):
-        row = _seed_order(
+        _seed_shipment(
             session,
             source_id=f"hist_rto_{i}",
-            payment_method=PaymentMethod.COD,
-            total_inr="1000",
             customer_source_id="repeat_rto_cust",
+            fulfillment_status=FulfillmentStatus.RTO.value,
         )
-        row.normalized = {**row.normalized, "fulfillment_status": FulfillmentStatus.RTO.value}
-        session.add(row)
     _seed_order(
         session,
         source_id="high_risk",

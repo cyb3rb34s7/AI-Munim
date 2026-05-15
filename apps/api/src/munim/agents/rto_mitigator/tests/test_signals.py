@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
+import pytest
 from sqlmodel import Session
 
 from munim.agents.rto_mitigator.signals import (
@@ -49,6 +50,37 @@ def _seed_order(
         payload_hash=f"h_{source_id}",
         raw={"id": source_id},
         normalized=normalized,
+    )
+    session.add(row)
+    session.flush()
+    return row
+
+
+def _seed_shipment(
+    session: Session,
+    *,
+    source_id: str,
+    customer_source_id: str,
+    fulfillment_status: str,
+) -> Record:
+    row = Record(
+        merchant_id="m_default",
+        source_system=SourceSystem.SHIPROCKET.value,
+        source_id=source_id,
+        entity_type=EntityType.SHIPMENT.value,
+        fetched_at=datetime.now(UTC),
+        payload_hash=f"h_{source_id}",
+        raw={"id": source_id},
+        normalized={
+            "customer_source_id": customer_source_id,
+            "fulfillment_status": fulfillment_status,
+            "channel_order_id": source_id,
+            "awb_code": f"AWB_{source_id}",
+            "courier_name": "Test Courier",
+            "total_inr": "1000.00",
+            "placed_at": "2026-05-01T05:00:00+00:00",
+            "pincode": "110001",
+        },
     )
     session.add(row)
     session.flush()
@@ -106,8 +138,6 @@ def test_time_of_order_risk_business_hours_returns_low_score() -> None:
 
 
 def test_time_of_order_risk_naive_datetime_raises() -> None:
-    import pytest
-
     with pytest.raises(ValueError, match="timezone"):
         time_of_order_risk("2026-05-10T23:45:00")
 
@@ -130,14 +160,13 @@ def test_customer_rto_rate_missing_customer_id_returns_baseline_with_diagnostic(
 
 def test_customer_rto_rate_with_history_uses_observed_rate(session: Session) -> None:
     for i in range(5):
-        _seed_order(
+        _seed_shipment(
             session,
             source_id=f"hist_{i}",
-            customer_id="customer_x",
-            pincode="560001",
-            payment_method=PaymentMethod.COD,
-            total_inr="1000",
-            fulfillment_status=FulfillmentStatus.RTO.value if i < 2 else None,
+            customer_source_id="customer_x",
+            fulfillment_status=FulfillmentStatus.RTO.value
+            if i < 2
+            else FulfillmentStatus.FULFILLED.value,
         )
     session.commit()
 
@@ -145,3 +174,59 @@ def test_customer_rto_rate_with_history_uses_observed_rate(session: Session) -> 
     assert result.diagnostic["history_count"] == 5
     assert result.diagnostic["rto_count"] == 2
     assert result.diagnostic["confident"] is True
+
+
+def test_customer_rto_rate_uses_shipments_not_orders(session: Session) -> None:
+    # Rewire regression-lock: orders never carry fulfillment_status (that's a
+    # shipment lifecycle attribute). The signal must read from Shiprocket
+    # shipments, not Shopify orders, or it returns the baseline for every
+    # customer regardless of their RTO history.
+    for i in range(5):
+        _seed_shipment(
+            session,
+            source_id=f"sr_{i}",
+            customer_source_id="cust_a_hash",
+            fulfillment_status=FulfillmentStatus.RTO.value
+            if i < 3
+            else FulfillmentStatus.FULFILLED.value,
+        )
+    session.commit()
+    result = customer_rto_rate(session, "m_default", "cust_a_hash")
+    assert result.diagnostic["history_count"] == 5
+    assert result.diagnostic["rto_count"] == 3
+    assert result.diagnostic["rate_source"] == "customer_history"
+    assert result.diagnostic["confident"] is True
+    # observed_rate 0.6 * multiplier 1.5 = 0.9, well clear of the cap.
+    assert result.score == pytest.approx(0.9)
+
+
+def test_customer_rto_rate_ignores_non_shiprocket_records(session: Session) -> None:
+    for i in range(5):
+        _seed_order(
+            session,
+            source_id=f"shopify_{i}",
+            customer_id="cust_a_hash",
+            pincode="110001",
+            payment_method=PaymentMethod.COD,
+            total_inr="1000",
+            fulfillment_status=FulfillmentStatus.RTO.value,
+        )
+    session.commit()
+    result = customer_rto_rate(session, "m_default", "cust_a_hash")
+    assert result.diagnostic["history_count"] == 0
+    assert result.score == 0.2  # population baseline
+
+
+def test_customer_rto_rate_with_few_shipments_returns_baseline(session: Session) -> None:
+    for i in range(2):
+        _seed_shipment(
+            session,
+            source_id=f"sr_{i}",
+            customer_source_id="cust_b_hash",
+            fulfillment_status=FulfillmentStatus.RTO.value,
+        )
+    session.commit()
+    result = customer_rto_rate(session, "m_default", "cust_b_hash")
+    assert result.diagnostic["history_count"] == 2
+    assert result.diagnostic["confident"] is False
+    assert result.score == 0.2

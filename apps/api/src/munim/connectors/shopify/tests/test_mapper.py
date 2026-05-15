@@ -58,15 +58,21 @@ def test_maps_partial_order_and_preserves_leading_zero_pincode(
     assert order.pincode == "000123"
 
 
-def test_customer_source_id_is_string_even_when_shopify_returns_int(
+def test_customer_source_id_hashes_email_so_it_joins_with_shiprocket(
     fixture_orders: list[dict[str, Any]],
 ) -> None:
-    # Real bug class: Shopify sends customer.id as a JSON number. If we don't
-    # explicitly stringify, the typed schema would fail or — worse — store an
-    # int in a `str | None` field via Python's duck-typing and break joins.
+    # Cross-connector contract: Shopify and Shiprocket must produce the same
+    # 16-char SHA-256 hash from email so the RTO agent's customer-history
+    # query joins them. If this drifts, customer_rto_rate silently returns
+    # the population baseline for every customer.
+    from munim.connectors.shiprocket.mapper import compute_customer_source_id
+
     cod_order = next(o for o in fixture_orders if o["id"] == 5510000000001)
     order = map_shopify_order_to_normalized(cod_order)
-    assert order.customer_source_id == "7700000000001"
+    expected = compute_customer_source_id("a@example.in", "+919900000001")
+    assert order.customer_source_id == expected
+    assert order.customer_source_id is not None
+    assert len(order.customer_source_id) == 16
 
 
 def test_mapper_handles_missing_customer_for_guest_checkout() -> None:
