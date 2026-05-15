@@ -85,13 +85,14 @@ def list_connectors(
     merchant_id: str,
     registry: ConnectorRegistry,
 ) -> list[ConnectorView]:
-    return [_build_view(session, merchant_id, name) for name in registry.names()]
+    return [build_connector_view(session, merchant_id, name, registry) for name in registry.names()]
 
 
 def connect_demo(
     session: Session,
     merchant_id: str,
     name: ConnectorName,
+    registry: ConnectorRegistry,
 ) -> ConnectorView:
     """Create or update a demo credential for `name`. Idempotent."""
     fixture_path = _resolve_demo_fixture_path(name)
@@ -118,7 +119,7 @@ def connect_demo(
         session.add(existing)
     session.flush()  # so list_connectors below sees the new row
 
-    return _build_view(session, merchant_id, name)
+    return build_connector_view(session, merchant_id, name, registry)
 
 
 def start_oauth(merchant_id: str, name: ConnectorName, shop: str) -> StartOAuthResponse:
@@ -142,6 +143,7 @@ async def complete_oauth(
     state: str,
     shop: str,
     callback_params: dict[str, str],
+    registry: ConnectorRegistry,
 ) -> OAuthCompleteResult:
     settings = get_settings()
 
@@ -192,7 +194,7 @@ async def complete_oauth(
         session.add(existing)
     session.flush()
 
-    view = _build_view(session, merchant_id, name)
+    view = build_connector_view(session, merchant_id, name, registry)
     return OAuthCompleteResult(connector=view)
 
 
@@ -274,7 +276,7 @@ async def sync_connector(
     session.add(credential_row)
     session.flush()
 
-    view = _build_view(session, merchant_id, name)
+    view = build_connector_view(session, merchant_id, name, registry)
     return SyncResponse(
         rows_upserted=result.rows_upserted,
         rows_skipped=result.rows_skipped,
@@ -284,7 +286,12 @@ async def sync_connector(
     )
 
 
-def _build_view(session: Session, merchant_id: str, name: ConnectorName) -> ConnectorView:
+def build_connector_view(
+    session: Session,
+    merchant_id: str,
+    name: ConnectorName,
+    registry: ConnectorRegistry,
+) -> ConnectorView:
     credential_row = session.exec(
         select(ConnectorCredentials)
         .where(ConnectorCredentials.merchant_id == merchant_id)
@@ -292,10 +299,12 @@ def _build_view(session: Session, merchant_id: str, name: ConnectorName) -> Conn
     ).first()
 
     counts = _record_counts(session, merchant_id, _connector_to_source(name))
+    connector = registry.get(name)
 
     return ConnectorView(
         name=name,
         status=CredentialStatus(credential_row.status) if credential_row else None,
+        is_demo=connector.is_demo,
         last_sync_at=credential_row.last_sync_at if credential_row else None,
         record_counts=list(counts),
     )

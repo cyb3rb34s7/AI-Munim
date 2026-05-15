@@ -17,6 +17,7 @@ class ErrorCode(StrEnum):
     CONNECTOR_SYNC_FAILED = "connector.sync_failed"
     CONNECTOR_UNKNOWN = "connector.unknown"
     CONNECTOR_NOT_CONNECTED = "connector.not_connected"
+    CONNECTOR_NOT_DEMO = "connector.not_demo"
     CONNECTOR_INVALID_SHOP_DOMAIN = "connector.invalid_shop_domain"
     RECORD_NOT_FOUND = "record.not_found"
     AUTH_INVALID_STATE = "auth.invalid_state"

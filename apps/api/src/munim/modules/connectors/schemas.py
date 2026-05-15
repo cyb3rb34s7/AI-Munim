@@ -25,6 +25,7 @@ class ConnectorView(BaseModel):
 
     name: ConnectorName
     status: CredentialStatus | None  # None = not yet connected
+    is_demo: bool
     last_sync_at: datetime | None
     record_counts: list[EntityCount]
 

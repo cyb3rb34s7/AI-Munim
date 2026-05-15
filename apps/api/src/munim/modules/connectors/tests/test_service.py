@@ -45,7 +45,7 @@ def test_unconnected_connector_has_null_status_and_zero_counts(
 def test_connect_demo_creates_credential_with_demo_status(
     session: Session,
 ) -> None:
-    view = connect_demo(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY)
+    view = connect_demo(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY, default_registry())
     session.commit()
     assert view.status is CredentialStatus.DEMO
 
@@ -56,9 +56,10 @@ def test_connect_demo_is_idempotent_on_repeated_call(
     # Clicking "Connect" twice must not create two credential rows — the
     # natural key (merchant_id, connector) is unique. Behaviour must be
     # explicit upsert, not silent error swallowing.
-    connect_demo(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY)
+    registry = default_registry()
+    connect_demo(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY, registry)
     session.commit()
-    view_again = connect_demo(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY)
+    view_again = connect_demo(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY, registry)
     session.commit()
     assert view_again.status is CredentialStatus.DEMO
 
@@ -70,7 +71,7 @@ async def test_sync_writes_three_records_and_returns_meaningful_counts(
     # exactly three rows (fixture has 3 orders) and the SyncResult counts
     # must agree with the DB. If counts and DB disagree, every downstream
     # number on the UI is a lie.
-    connect_demo(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY)
+    connect_demo(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY, default_registry())
     session.commit()
 
     result = await sync_connector(
@@ -89,7 +90,7 @@ async def test_sync_second_run_reports_three_skipped(session: Session) -> None:
     # The idempotency contract from Phase 2 must be observable at the API
     # surface, not just inside RowSink. If the UI says "3 rows synced" on
     # every click, users won't trust the system.
-    connect_demo(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY)
+    connect_demo(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY, default_registry())
     session.commit()
     await sync_connector(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY, default_registry())
     session.commit()
@@ -137,7 +138,7 @@ async def test_sync_wraps_untyped_exception_as_connector_sync_failed(
     # 'connector.sync_failed' — NOT 'system.unexpected'. Without the typed
     # wrap in service.sync_connector, this test fails by raising the bare
     # RuntimeError up to the caller and breaking the error-code contract.
-    connect_demo(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY)
+    connect_demo(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY, default_registry())
     session.commit()
 
     raising_registry = ConnectorRegistry({ConnectorName.SHOPIFY: _RaisingConnector()})

@@ -5,6 +5,7 @@ from fastapi.responses import RedirectResponse
 from sqlmodel import Session
 
 from munim.connectors.registry import ConnectorRegistry, UnknownConnectorError, default_registry
+from munim.modules.connectors.demo_connect import connect_demo_endpoint
 from munim.modules.connectors.schemas import (
     ConnectorListResponse,
     ConnectResponse,
@@ -70,7 +71,25 @@ def connect_endpoint(
     registry: ConnectorRegistry = Depends(_registry_dep),
 ) -> SuccessEnvelope[ConnectResponse]:
     connector_name = _resolve_name(name, registry)
-    view = connect_demo(session, DEFAULT_MERCHANT_ID, connector_name)
+    view = connect_demo(session, DEFAULT_MERCHANT_ID, connector_name, registry)
+    session.commit()
+    return SuccessEnvelope(
+        data=ConnectResponse(connector=view),
+        trace_id=request.state.trace_id,
+    )
+
+
+@router.post(
+    "/{name}/connect-demo",
+    response_model=SuccessEnvelope[ConnectResponse],
+)
+def connect_demo_route(
+    name: str,
+    request: Request,
+    session: Session = Depends(get_session),
+    registry: ConnectorRegistry = Depends(_registry_dep),
+) -> SuccessEnvelope[ConnectResponse]:
+    view = connect_demo_endpoint(session, DEFAULT_MERCHANT_ID, name, registry)
     session.commit()
     return SuccessEnvelope(
         data=ConnectResponse(connector=view),
@@ -141,6 +160,7 @@ async def oauth_callback_endpoint(
         state=state,
         shop=shop,
         callback_params=qp,
+        registry=registry,
     )
     session.commit()
 

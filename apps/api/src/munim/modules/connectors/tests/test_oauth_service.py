@@ -67,6 +67,7 @@ async def test_complete_oauth_stores_encrypted_token(session: Session) -> None:
         state=state,
         shop="munim-dev.myshopify.com",
         callback_params=raw_params,
+        registry=default_registry(),
     )
     session.commit()
 
