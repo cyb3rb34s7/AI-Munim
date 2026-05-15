@@ -88,9 +88,15 @@ class SyncContext:
 
 
 class BaseConnector(ABC):
-    """Every source-specific connector implements this contract."""
+    """Every source-specific connector implements this contract.
+
+    `is_demo` declares whether the connector ships a fixture-backed sync. Real
+    connectors set it to False (default); demo connectors override to True and
+    must be reachable via `POST /connectors/{name}/connect-demo`.
+    """
 
     name: ClassVar[ConnectorName]
+    is_demo: ClassVar[bool] = False
 
     @abstractmethod
     async def validate(self, credential: Credential) -> bool:

@@ -1,0 +1,844 @@
+{
+  "data": [
+    {
+      "campaign_id": "23847264829340001",
+      "campaign_name": "Diwali Push",
+      "date_start": "2026-04-15",
+      "date_stop": "2026-04-15",
+      "spend": "1639.43",
+      "impressions": "73418",
+      "clicks": "1667",
+      "ctr": "2.27",
+      "cpm": "22.33",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "18"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "73"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340001",
+      "campaign_name": "Diwali Push",
+      "date_start": "2026-04-16",
+      "date_stop": "2026-04-16",
+      "spend": "1223.21",
+      "impressions": "38746",
+      "clicks": "1143",
+      "ctr": "2.95",
+      "cpm": "31.57",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "10"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "39"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340001",
+      "campaign_name": "Diwali Push",
+      "date_start": "2026-04-17",
+      "date_stop": "2026-04-17",
+      "spend": "1892.18",
+      "impressions": "81806",
+      "clicks": "2062",
+      "ctr": "2.52",
+      "cpm": "23.13",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "20"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "82"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340001",
+      "campaign_name": "Diwali Push",
+      "date_start": "2026-04-18",
+      "date_stop": "2026-04-18",
+      "spend": "1029.80",
+      "impressions": "41457",
+      "clicks": "1103",
+      "ctr": "2.66",
+      "cpm": "24.84",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "10"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "41"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340001",
+      "campaign_name": "Diwali Push",
+      "date_start": "2026-04-19",
+      "date_stop": "2026-04-19",
+      "spend": "1026.54",
+      "impressions": "41763",
+      "clicks": "1211",
+      "ctr": "2.90",
+      "cpm": "24.58",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "10"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "42"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340001",
+      "campaign_name": "Diwali Push",
+      "date_start": "2026-04-20",
+      "date_stop": "2026-04-20",
+      "spend": "1544.94",
+      "impressions": "62121",
+      "clicks": "1739",
+      "ctr": "2.80",
+      "cpm": "24.87",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "16"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "62"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340001",
+      "campaign_name": "Diwali Push",
+      "date_start": "2026-04-21",
+      "date_stop": "2026-04-21",
+      "spend": "1809.43",
+      "impressions": "81949",
+      "clicks": "2598",
+      "ctr": "3.17",
+      "cpm": "22.08",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "20"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "82"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340001",
+      "campaign_name": "Diwali Push",
+      "date_start": "2026-04-22",
+      "date_stop": "2026-04-22",
+      "spend": "1698.14",
+      "impressions": "64275",
+      "clicks": "1324",
+      "ctr": "2.06",
+      "cpm": "26.42",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "16"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "64"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340001",
+      "campaign_name": "Diwali Push",
+      "date_start": "2026-04-23",
+      "date_stop": "2026-04-23",
+      "spend": "1957.21",
+      "impressions": "74193",
+      "clicks": "1454",
+      "ctr": "1.96",
+      "cpm": "26.38",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "19"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "74"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340001",
+      "campaign_name": "Diwali Push",
+      "date_start": "2026-04-24",
+      "date_stop": "2026-04-24",
+      "spend": "1096.72",
+      "impressions": "33214",
+      "clicks": "940",
+      "ctr": "2.83",
+      "cpm": "33.02",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "8"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "33"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340002",
+      "campaign_name": "Spring Sale - Hoodies",
+      "date_start": "2026-04-15",
+      "date_stop": "2026-04-15",
+      "spend": "903.56",
+      "impressions": "33097",
+      "clicks": "761",
+      "ctr": "2.30",
+      "cpm": "27.30",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "7"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "30"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340002",
+      "campaign_name": "Spring Sale - Hoodies",
+      "date_start": "2026-04-16",
+      "date_stop": "2026-04-16",
+      "spend": "986.56",
+      "impressions": "41470",
+      "clicks": "966",
+      "ctr": "2.33",
+      "cpm": "23.79",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "9"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "37"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340002",
+      "campaign_name": "Spring Sale - Hoodies",
+      "date_start": "2026-04-17",
+      "date_stop": "2026-04-17",
+      "spend": "914.70",
+      "impressions": "34926",
+      "clicks": "974",
+      "ctr": "2.79",
+      "cpm": "26.19",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "8"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "31"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340002",
+      "campaign_name": "Spring Sale - Hoodies",
+      "date_start": "2026-04-18",
+      "date_stop": "2026-04-18",
+      "spend": "788.68",
+      "impressions": "29156",
+      "clicks": "458",
+      "ctr": "1.57",
+      "cpm": "27.05",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "6"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "26"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340002",
+      "campaign_name": "Spring Sale - Hoodies",
+      "date_start": "2026-04-19",
+      "date_stop": "2026-04-19",
+      "spend": "613.95",
+      "impressions": "26822",
+      "clicks": "435",
+      "ctr": "1.62",
+      "cpm": "22.89",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "6"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "24"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340002",
+      "campaign_name": "Spring Sale - Hoodies",
+      "date_start": "2026-04-20",
+      "date_stop": "2026-04-20",
+      "spend": "616.40",
+      "impressions": "29338",
+      "clicks": "563",
+      "ctr": "1.92",
+      "cpm": "21.01",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "6"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "26"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340002",
+      "campaign_name": "Spring Sale - Hoodies",
+      "date_start": "2026-04-21",
+      "date_stop": "2026-04-21",
+      "spend": "817.84",
+      "impressions": "34581",
+      "clicks": "712",
+      "ctr": "2.06",
+      "cpm": "23.65",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "8"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "31"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340002",
+      "campaign_name": "Spring Sale - Hoodies",
+      "date_start": "2026-04-22",
+      "date_stop": "2026-04-22",
+      "spend": "604.75",
+      "impressions": "26676",
+      "clicks": "774",
+      "ctr": "2.90",
+      "cpm": "22.67",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "6"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "24"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340002",
+      "campaign_name": "Spring Sale - Hoodies",
+      "date_start": "2026-04-23",
+      "date_stop": "2026-04-23",
+      "spend": "824.02",
+      "impressions": "31584",
+      "clicks": "556",
+      "ctr": "1.76",
+      "cpm": "26.09",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "7"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "28"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340002",
+      "campaign_name": "Spring Sale - Hoodies",
+      "date_start": "2026-04-24",
+      "date_stop": "2026-04-24",
+      "spend": "864.56",
+      "impressions": "39970",
+      "clicks": "827",
+      "ctr": "2.07",
+      "cpm": "21.63",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "9"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "36"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340003",
+      "campaign_name": "Retargeting - Cart Abandoners",
+      "date_start": "2026-04-15",
+      "date_stop": "2026-04-15",
+      "spend": "495.81",
+      "impressions": "13896",
+      "clicks": "464",
+      "ctr": "3.34",
+      "cpm": "35.68",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "6"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "19"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340003",
+      "campaign_name": "Retargeting - Cart Abandoners",
+      "date_start": "2026-04-16",
+      "date_stop": "2026-04-16",
+      "spend": "373.85",
+      "impressions": "9810",
+      "clicks": "359",
+      "ctr": "3.66",
+      "cpm": "38.11",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "4"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "14"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340003",
+      "campaign_name": "Retargeting - Cart Abandoners",
+      "date_start": "2026-04-17",
+      "date_stop": "2026-04-17",
+      "spend": "191.62",
+      "impressions": "6750",
+      "clicks": "200",
+      "ctr": "2.97",
+      "cpm": "28.39",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "3"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "9"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340003",
+      "campaign_name": "Retargeting - Cart Abandoners",
+      "date_start": "2026-04-18",
+      "date_stop": "2026-04-18",
+      "spend": "207.10",
+      "impressions": "6783",
+      "clicks": "265",
+      "ctr": "3.91",
+      "cpm": "30.53",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "3"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "9"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340003",
+      "campaign_name": "Retargeting - Cart Abandoners",
+      "date_start": "2026-04-19",
+      "date_stop": "2026-04-19",
+      "spend": "450.55",
+      "impressions": "14177",
+      "clicks": "493",
+      "ctr": "3.48",
+      "cpm": "31.78",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "6"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "20"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340003",
+      "campaign_name": "Retargeting - Cart Abandoners",
+      "date_start": "2026-04-20",
+      "date_stop": "2026-04-20",
+      "spend": "258.25",
+      "impressions": "6627",
+      "clicks": "211",
+      "ctr": "3.19",
+      "cpm": "38.97",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "3"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "9"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340003",
+      "campaign_name": "Retargeting - Cart Abandoners",
+      "date_start": "2026-04-21",
+      "date_stop": "2026-04-21",
+      "spend": "205.95",
+      "impressions": "6652",
+      "clicks": "222",
+      "ctr": "3.34",
+      "cpm": "30.96",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "3"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "9"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340003",
+      "campaign_name": "Retargeting - Cart Abandoners",
+      "date_start": "2026-04-22",
+      "date_stop": "2026-04-22",
+      "spend": "205.10",
+      "impressions": "5857",
+      "clicks": "225",
+      "ctr": "3.85",
+      "cpm": "35.02",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "3"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "8"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340003",
+      "campaign_name": "Retargeting - Cart Abandoners",
+      "date_start": "2026-04-23",
+      "date_stop": "2026-04-23",
+      "spend": "259.76",
+      "impressions": "8481",
+      "clicks": "339",
+      "ctr": "4.00",
+      "cpm": "30.63",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "4"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "12"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340003",
+      "campaign_name": "Retargeting - Cart Abandoners",
+      "date_start": "2026-04-24",
+      "date_stop": "2026-04-24",
+      "spend": "303.81",
+      "impressions": "10444",
+      "clicks": "268",
+      "ctr": "2.57",
+      "cpm": "29.09",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "5"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "15"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340004",
+      "campaign_name": "New Drop - Sneakers",
+      "date_start": "2026-04-15",
+      "date_stop": "2026-04-15",
+      "spend": "143.86",
+      "impressions": "5927",
+      "clicks": "116",
+      "ctr": "1.95",
+      "cpm": "24.27",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "1"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "3"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340004",
+      "campaign_name": "New Drop - Sneakers",
+      "date_start": "2026-04-16",
+      "date_stop": "2026-04-16",
+      "spend": "268.86",
+      "impressions": "14424",
+      "clicks": "211",
+      "ctr": "1.46",
+      "cpm": "18.64",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "1"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "7"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340004",
+      "campaign_name": "New Drop - Sneakers",
+      "date_start": "2026-04-17",
+      "date_stop": "2026-04-17",
+      "spend": "498.45",
+      "impressions": "21402",
+      "clicks": "464",
+      "ctr": "2.17",
+      "cpm": "23.29",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "2"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "11"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340004",
+      "campaign_name": "New Drop - Sneakers",
+      "date_start": "2026-04-18",
+      "date_stop": "2026-04-18",
+      "spend": "444.31",
+      "impressions": "24534",
+      "clicks": "456",
+      "ctr": "1.86",
+      "cpm": "18.11",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "2"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "12"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340004",
+      "campaign_name": "New Drop - Sneakers",
+      "date_start": "2026-04-19",
+      "date_stop": "2026-04-19",
+      "spend": "372.68",
+      "impressions": "15947",
+      "clicks": "211",
+      "ctr": "1.32",
+      "cpm": "23.37",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "2"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "8"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340004",
+      "campaign_name": "New Drop - Sneakers",
+      "date_start": "2026-04-20",
+      "date_stop": "2026-04-20",
+      "spend": "356.38",
+      "impressions": "18639",
+      "clicks": "283",
+      "ctr": "1.52",
+      "cpm": "19.12",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "2"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "9"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340004",
+      "campaign_name": "New Drop - Sneakers",
+      "date_start": "2026-04-21",
+      "date_stop": "2026-04-21",
+      "spend": "281.49",
+      "impressions": "10221",
+      "clicks": "210",
+      "ctr": "2.05",
+      "cpm": "27.54",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "1"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "5"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340004",
+      "campaign_name": "New Drop - Sneakers",
+      "date_start": "2026-04-22",
+      "date_stop": "2026-04-22",
+      "spend": "205.36",
+      "impressions": "8925",
+      "clicks": "108",
+      "ctr": "1.21",
+      "cpm": "23.01",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "1"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "4"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340004",
+      "campaign_name": "New Drop - Sneakers",
+      "date_start": "2026-04-23",
+      "date_stop": "2026-04-23",
+      "spend": "465.05",
+      "impressions": "17411",
+      "clicks": "237",
+      "ctr": "1.36",
+      "cpm": "26.71",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "2"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "9"
+        }
+      ]
+    },
+    {
+      "campaign_id": "23847264829340004",
+      "campaign_name": "New Drop - Sneakers",
+      "date_start": "2026-04-24",
+      "date_stop": "2026-04-24",
+      "spend": "355.58",
+      "impressions": "14760",
+      "clicks": "174",
+      "ctr": "1.18",
+      "cpm": "24.09",
+      "actions": [
+        {
+          "action_type": "purchase",
+          "value": "1"
+        },
+        {
+          "action_type": "add_to_cart",
+          "value": "7"
+        }
+      ]
+    }
+  ]
+}

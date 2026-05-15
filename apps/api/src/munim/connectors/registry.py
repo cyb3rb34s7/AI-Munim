@@ -10,6 +10,7 @@ no None.
 from collections.abc import Mapping
 
 from munim.connectors.base import BaseConnector
+from munim.connectors.meta_ads.connector import MetaAdsConnector
 from munim.connectors.shopify.connector import ShopifyConnector
 from munim.shared.constants import ConnectorName, ErrorCode
 from munim.shared.errors import MunimError
@@ -39,9 +40,9 @@ class ConnectorRegistry:
 
 
 def default_registry() -> ConnectorRegistry:
-    """The production registry. Phase 4 adds Meta Ads + Shiprocket here."""
     return ConnectorRegistry(
         {
             ConnectorName.SHOPIFY: ShopifyConnector(),
+            ConnectorName.META_ADS: MetaAdsConnector(),
         }
     )
