@@ -19,6 +19,36 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-15 — Phase 8 review fixes + cross-connector smoke
+
+**What changed:** Reviewer surfaced 4 CRITICAL + 9 IMPORTANT findings; all CRITICAL and the actionable IMPORTANT items addressed in one fix commit.
+
+- **Customer hash extracted** to `shared/utils/customer_hash.py` (was Shopify importing from Shiprocket — package coupling). Empty-string email/phone normalised to None at entry so the two upstream conventions ("missing=None" vs "missing=''") produce identical hashes for the same human.
+- **Legacy `/connect` endpoint now rejects Phase 8 demo connectors** with `LegacyConnectRejectedError` (HTTP 400, `connector.not_demo`). Shopify still works through this path for pre-Phase-4 test setups; the two endpoints are now complementary instead of overlapping.
+- **`cpm` → `cpm_inr` Decimal** in `MetaAdSpend`. CPM is INR-per-thousand-impressions; float would bleed once a chat query multiplies by impressions to recover spend (§8.1).
+- **Three regression tests added:** `MissingShipmentFieldError` raise path (was raised but never proven to fire — Phase 3 dead-code lesson regression); `customer_rto_rate` saturation cap at 1.0 for pure-RTO history; customer C 1/5 RTO distribution in the Shiprocket fixture (was locking A and B only).
+- **Shiprocket mapper tz-aware handler softened** — was raising on offset timestamps (locked the wrong invariant — would fail if Shiprocket fixed their API). Now converts to UTC normally.
+- **`ConnectorCard.tsx` magic string fixed** — replaced `view.name === 'shiprocket'` with `ConnectorName.Shiprocket` constant. Dropped redundant `as ConnectorName` casts.
+- **`apps/api/scripts/seed_cod_order.py` rewritten** to seed two COD orders (Customer A high-RTO + Customer B clean) whose `customer_source_id` hashes match the Shiprocket fixture's curated customers — the cross-connector join now demonstrates the agent narrative end-to-end.
+
+**Live smoke walk (verified):**
+- `POST /connectors/meta_ads/connect-demo` → status `demo`, no creds stored encrypted.
+- `POST /connectors/meta_ads/sync` → 40 ad_spend rows upserted.
+- `POST /connectors/shiprocket/connect-demo + sync` → 50 shipment rows upserted.
+- `POST /connectors/meta_ads/connect` (legacy) → 400 `connector.not_demo` with helpful body pointing to `/connect-demo`.
+- Re-seed COD orders → `POST /agents/rto_mitigator/run` produces 3 decisions:
+  - `seed_cod_high_risk` (Customer A, 3/5 RTO via Shiprocket) → `convert_to_prepaid` score 0.772, est ₹3242.40 saved.
+  - `seed_cod_clean` (Customer B, 0/5 RTO) → `confirmation_call` score 0.409, est ₹981.60.
+  - `seed_cod_demo` (no Shiprocket history) → population baseline 0.2 → `convert_to_prepaid` score 0.618.
+
+**Test counts:** 206 → 213 backend (+7). `pnpm typecheck && pnpm lint && pnpm build` all green.
+
+**Deferred to Phase 9 cleanup (documented):** `useConnectMutation` + `postConnect` dead code; `ConnectorsGrid` silent-null on empty registry; `auth_blob_encrypted` column name now misleading for demo rows.
+
+**Reverts cleanly?:** Yes — single fix commit on top of Phase 8.
+
+---
+
 ## 2026-05-15 — Phase 8: Meta Ads + Shiprocket demo connectors
 
 **What changed:** Brought the project to three connectors behind one `BaseConnector` ABC (the brief's hard requirement) by adding Meta Ads and Shiprocket as demo-mode connectors alongside the real Shopify OAuth path. Curated Shiprocket shipment fixture so the RTO agent's customer-history signal fires meaningfully on the demo (high-RTO customer A → `convert_to_prepaid`, clean customer B → `no_action`). Rewired `customer_rto_rate` to read shipments instead of orders (orders never carry `fulfillment_status` — that's a shipment lifecycle attribute), and migrated the Shopify mapper's `customer_source_id` from raw Shopify ID to SHA-256(email||phone) so the cross-connector join works.
