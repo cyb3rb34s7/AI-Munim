@@ -19,6 +19,28 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-16 — Phase 9 review fixes
+
+**What changed:** Reviewer surfaced 4 CRITICAL + 12 IMPORTANT findings; all CRITICAL and the actionable IMPORTANT items addressed in one fix commit.
+
+- **`render.yaml` autoDeploy → false** so a bad commit cannot auto-publish to the live URL during the final sprint. A reviewer must explicitly click "Deploy latest commit" in the Render dashboard.
+- **Backend `SHOPIFY_OAUTH_ENABLED` flag now enforced server-side** — `start_oauth` and `complete_oauth` raise the new `FeatureDisabledError` (HTTP 403, `feature.disabled`) when the flag is false. The flag was honored on the frontend only; the deployed backend was leaking real Shopify authorize URLs built from placeholder client ids. New `ErrorCode.FEATURE_DISABLED` registered + tests cover both endpoints.
+- **`FRONTEND_BASE_URL` declared in `render.yaml`** (sync: false, user-managed post-deploy) so future post-OAuth redirects don't silently fall back to `localhost:5173`.
+- **Sidebar surfaces `user.display_name`** (avatar with initials + name + "Demo workspace" subtitle) and a wired Sign-out button. The reviewer flagged that the input on `/start` was never displayed and `useLogout` was exported but never called from the UI; both fixed.
+- **Auth tests strengthened**: the original tampered-signature test stays as the proof that signed-cookie verification runs; added a positive cookie-portability test that confirms a valid cookie carries identity across two `TestClient` instances. Together they lock the contract "HMAC verification is the gate, not cookie presence."
+
+**Deferred** (deliberately, with rationale in context.md):
+- `DEFAULT_MERCHANT_ID` redeclared in 8 test files instead of imported. NIT-level §7 violation; sed sweep not worth the time pressure.
+- `auth_blob_encrypted` column name misleading for demo rows. Pre-existing from Phase 4; Phase 10 cleanup.
+- `useAuthContext` colocated with `<AuthProvider>` + local eslint-disable. Refactor opportunity, not blocking.
+- Middleware-order docstring clarification. Cosmetic.
+
+**Test counts:** 235 → 238. All gates green: `ruff` + `ruff format` + `mypy` + `pytest` (backend) and `pnpm typecheck` + `pnpm lint` + `pnpm build` (frontend).
+
+**Deploy verdict:** reviewer flipped from "NOT YET safe to deploy publicly" to ready-to-deploy with these fixes.
+
+---
+
 ## 2026-05-16 — Phase 9 multi-tenant backbone + deployment
 
 **What changed:** Phase 9 closes the brief's remaining gap — the scaling claim moves from "future-tense paragraph" to "tested property of the running system." Every visitor to the deployed URL gets a fresh `Merchant` + `User` row, a signed anonymous session cookie, and 96 pre-seeded demo rows isolated from every other visitor.
