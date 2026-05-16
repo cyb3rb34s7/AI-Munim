@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 
 
 def test_list_returns_envelope_with_shopify(auth_client: AuthClient) -> None:
-    response = auth_client.client.get("/connectors")
+    response = auth_client.client.get("/api/connectors")
     assert response.status_code == 200
     body = response.json()
     assert body["success"] is True
@@ -13,14 +13,14 @@ def test_list_returns_envelope_with_shopify(auth_client: AuthClient) -> None:
 
 
 def test_unauthenticated_connectors_list_returns_401(client: TestClient) -> None:
-    response = client.get("/connectors")
+    response = client.get("/api/connectors")
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "auth.unauthenticated"
 
 
 def test_connect_then_list_shows_demo_status(auth_client: AuthClient) -> None:
-    auth_client.client.post("/connectors/shopify/connect").raise_for_status()
-    body = auth_client.client.get("/connectors").json()
+    auth_client.client.post("/api/connectors/shopify/connect").raise_for_status()
+    body = auth_client.client.get("/api/connectors").json()
     shopify = next(c for c in body["data"]["connectors"] if c["name"] == "shopify")
     assert shopify["status"] == "demo"
 
@@ -34,9 +34,9 @@ def test_sync_returns_three_upserts_and_updates_counts(auth_client: AuthClient) 
     # apps/api/data/fixtures/shopify/orders.json (3 orders). Those 3
     # orders have distinct source_ids from the Phase 9 seed fixture, so
     # the upsert count is exactly 3.
-    auth_client.client.post("/connectors/shopify/connect").raise_for_status()
+    auth_client.client.post("/api/connectors/shopify/connect").raise_for_status()
 
-    sync_response = auth_client.client.post("/connectors/shopify/sync")
+    sync_response = auth_client.client.post("/api/connectors/shopify/sync")
     assert sync_response.status_code == 200
     sync_body = sync_response.json()
     assert sync_body["data"]["rows_upserted"] == 3
@@ -63,7 +63,7 @@ def test_sync_without_connect_returns_typed_error_envelope(auth_client: AuthClie
             s.delete(existing)
             s.commit()
 
-    response = auth_client.client.post("/connectors/shopify/sync")
+    response = auth_client.client.post("/api/connectors/shopify/sync")
     assert response.status_code == 409
     body = response.json()
     assert body["success"] is False
@@ -72,7 +72,7 @@ def test_sync_without_connect_returns_typed_error_envelope(auth_client: AuthClie
 
 
 def test_unknown_connector_name_returns_404_envelope(auth_client: AuthClient) -> None:
-    response = auth_client.client.post("/connectors/woocommerce/connect")
+    response = auth_client.client.post("/api/connectors/woocommerce/connect")
     assert response.status_code == 404
     body = response.json()
     assert body["success"] is False
@@ -88,12 +88,12 @@ def test_two_merchants_see_independent_connector_state(auth_client: AuthClient) 
 
     from munim.main import create_app
 
-    auth_client.client.post("/connectors/shopify/connect").raise_for_status()
-    auth_client.client.post("/connectors/shopify/sync").raise_for_status()
+    auth_client.client.post("/api/connectors/shopify/connect").raise_for_status()
+    auth_client.client.post("/api/connectors/shopify/sync").raise_for_status()
 
     with _TestClient(create_app()) as b:
-        b.post("/auth/start", json={"display_name": "Bravo"}).raise_for_status()
-        b_body = b.get("/connectors").json()
+        b.post("/api/auth/start", json={"display_name": "Bravo"}).raise_for_status()
+        b_body = b.get("/api/connectors").json()
         b_shopify = next(c for c in b_body["data"]["connectors"] if c["name"] == "shopify")
         # Merchant B's Shopify counts come from the Phase 9 seed only — 6 orders.
         order_count = next(

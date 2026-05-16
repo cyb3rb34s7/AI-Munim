@@ -7,7 +7,7 @@ from munim.models import ConnectorCredentials
 def test_connect_demo_writes_credentials_row_with_demo_status(auth_client: AuthClient) -> None:
     from munim.shared.db import get_engine
 
-    resp = auth_client.client.post("/connectors/meta_ads/connect-demo")
+    resp = auth_client.client.post("/api/connectors/meta_ads/connect-demo")
     assert resp.status_code == 200
     body = resp.json()
     assert body["success"] is True
@@ -25,8 +25,8 @@ def test_connect_demo_writes_credentials_row_with_demo_status(auth_client: AuthC
 
 
 def test_connect_demo_is_idempotent_for_repeat_clicks(auth_client: AuthClient) -> None:
-    first = auth_client.client.post("/connectors/shiprocket/connect-demo")
-    second = auth_client.client.post("/connectors/shiprocket/connect-demo")
+    first = auth_client.client.post("/api/connectors/shiprocket/connect-demo")
+    second = auth_client.client.post("/api/connectors/shiprocket/connect-demo")
     assert first.status_code == 200
     assert second.status_code == 200
 
@@ -42,7 +42,7 @@ def test_connect_demo_is_idempotent_for_repeat_clicks(auth_client: AuthClient) -
 
 
 def test_connect_demo_rejects_non_demo_connector(auth_client: AuthClient) -> None:
-    resp = auth_client.client.post("/connectors/shopify/connect-demo")
+    resp = auth_client.client.post("/api/connectors/shopify/connect-demo")
     assert resp.status_code == 400
     body = resp.json()
     assert body["success"] is False
@@ -50,7 +50,7 @@ def test_connect_demo_rejects_non_demo_connector(auth_client: AuthClient) -> Non
 
 
 def test_connect_demo_rejects_unknown_connector(auth_client: AuthClient) -> None:
-    resp = auth_client.client.post("/connectors/madeup/connect-demo")
+    resp = auth_client.client.post("/api/connectors/madeup/connect-demo")
     assert resp.status_code == 404
     body = resp.json()
     assert body["success"] is False

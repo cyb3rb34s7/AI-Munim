@@ -82,7 +82,7 @@ def auth_client() -> Generator[AuthClient, None, None]:
 
     app = create_app()
     with TestClient(app) as test_client:
-        response = test_client.post("/auth/start", json={"display_name": "Test User"})
+        response = test_client.post("/api/auth/start", json={"display_name": "Test User"})
         response.raise_for_status()
         body = response.json()
         yield AuthClient(

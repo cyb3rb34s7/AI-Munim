@@ -13,7 +13,7 @@ from munim.shared.crypto import sign_state
 
 def test_oauth_init_returns_authorize_url(auth_client: AuthClient) -> None:
     response = auth_client.client.post(
-        "/connectors/shopify/oauth/init",
+        "/api/connectors/shopify/oauth/init",
         json={"shop": "munim-dev.myshopify.com"},
     )
     assert response.status_code == 200
@@ -25,7 +25,7 @@ def test_oauth_init_returns_authorize_url(auth_client: AuthClient) -> None:
 
 def test_oauth_init_rejects_invalid_shop(auth_client: AuthClient) -> None:
     response = auth_client.client.post(
-        "/connectors/shopify/oauth/init",
+        "/api/connectors/shopify/oauth/init",
         json={"shop": "evil.attacker.com"},
     )
     assert response.status_code == 400
@@ -35,7 +35,7 @@ def test_oauth_init_rejects_invalid_shop(auth_client: AuthClient) -> None:
 
 def test_oauth_callback_missing_params_returns_typed_error(auth_client: AuthClient) -> None:
     # Per §10: missing required callback params must not redirect silently.
-    response = auth_client.client.get("/connectors/shopify/oauth/callback?code=abc")
+    response = auth_client.client.get("/api/connectors/shopify/oauth/callback?code=abc")
     assert response.status_code == 422
     body = response.json()
     assert body["error"]["code"] == "validation.bad_format"
@@ -43,7 +43,7 @@ def test_oauth_callback_missing_params_returns_typed_error(auth_client: AuthClie
 
 def test_unauthenticated_oauth_init_returns_401(client: TestClient) -> None:
     response = client.post(
-        "/connectors/shopify/oauth/init",
+        "/api/connectors/shopify/oauth/init",
         json={"shop": "munim-dev.myshopify.com"},
     )
     assert response.status_code == 401
@@ -79,7 +79,7 @@ def test_oauth_callback_full_flow_redirects_to_frontend(auth_client: AuthClient)
     )
 
     response = auth_client.client.get(
-        "/connectors/shopify/oauth/callback",
+        "/api/connectors/shopify/oauth/callback",
         params=params,
         follow_redirects=False,
     )
@@ -101,7 +101,7 @@ def test_oauth_callback_with_bad_hmac_returns_typed_error(auth_client: AuthClien
     )
     # Note: hmac is intentionally wrong.
     response = auth_client.client.get(
-        "/connectors/shopify/oauth/callback",
+        "/api/connectors/shopify/oauth/callback",
         params={
             "code": "abc",
             "state": state,

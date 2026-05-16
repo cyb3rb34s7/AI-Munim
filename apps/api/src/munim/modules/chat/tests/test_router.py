@@ -68,7 +68,7 @@ def test_post_message_returns_text_with_citations(
 
     monkeypatch.setattr(agent_module, "build_agent", patched_build)
 
-    response = auth_client.client.post("/chat/messages", json={"message": "How many orders?"})
+    response = auth_client.client.post("/api/chat/messages", json={"message": "How many orders?"})
     assert response.status_code == 200
     body = response.json()
     assert body["success"] is True
@@ -79,7 +79,7 @@ def test_post_message_returns_text_with_citations(
 
 def test_post_message_validates_input(auth_client: AuthClient) -> None:
     # Empty message must fail validation per §10.
-    response = auth_client.client.post("/chat/messages", json={"message": ""})
+    response = auth_client.client.post("/api/chat/messages", json={"message": ""})
     assert response.status_code == 422
     body = response.json()
     assert body["success"] is False
@@ -87,6 +87,6 @@ def test_post_message_validates_input(auth_client: AuthClient) -> None:
 
 
 def test_unauthenticated_chat_returns_401(client: TestClient) -> None:
-    response = client.post("/chat/messages", json={"message": "Hi"})
+    response = client.post("/api/chat/messages", json={"message": "Hi"})
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "auth.unauthenticated"

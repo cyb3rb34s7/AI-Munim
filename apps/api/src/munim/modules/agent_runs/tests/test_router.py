@@ -44,7 +44,7 @@ def test_trigger_agent_returns_summary(auth_client: AuthClient) -> None:
     with Session(get_engine()) as s:
         _seed_cod_order(s, auth_client.merchant_id, "cod_smoke")
 
-    response = auth_client.client.post("/agents/rto_mitigator/run")
+    response = auth_client.client.post("/api/agents/rto_mitigator/run")
     assert response.status_code == 200
     body = response.json()
     assert body["success"] is True
@@ -56,7 +56,7 @@ def test_trigger_agent_returns_summary(auth_client: AuthClient) -> None:
 
 
 def test_trigger_unknown_agent_returns_404(auth_client: AuthClient) -> None:
-    response = auth_client.client.post("/agents/madeup/run")
+    response = auth_client.client.post("/api/agents/madeup/run")
     assert response.status_code == 404
     body = response.json()
     assert body["error"]["code"] == "agent.unknown"
@@ -70,8 +70,8 @@ def test_list_agent_runs_returns_summaries(auth_client: AuthClient) -> None:
     with Session(get_engine()) as s:
         _seed_cod_order(s, auth_client.merchant_id, "cod_list_1")
 
-    auth_client.client.post("/agents/rto_mitigator/run").raise_for_status()
-    response = auth_client.client.get("/agent-runs")
+    auth_client.client.post("/api/agents/rto_mitigator/run").raise_for_status()
+    response = auth_client.client.get("/api/agent-runs")
     assert response.status_code == 200
     body = response.json()
     assert len(body["data"]["items"]) >= 1
@@ -108,10 +108,10 @@ def test_get_agent_run_returns_decisions(auth_client: AuthClient) -> None:
         s.commit()
         _seed_cod_order(s, auth_client.merchant_id, "cod_detail")
 
-    trigger_body = auth_client.client.post("/agents/rto_mitigator/run").json()
+    trigger_body = auth_client.client.post("/api/agents/rto_mitigator/run").json()
     run_log_id = trigger_body["data"]["run"]["run_log_id"]
 
-    response = auth_client.client.get(f"/agent-runs/{run_log_id}")
+    response = auth_client.client.get(f"/api/agent-runs/{run_log_id}")
     assert response.status_code == 200
     body = response.json()
     assert body["data"]["run_log_id"] == run_log_id
@@ -120,14 +120,14 @@ def test_get_agent_run_returns_decisions(auth_client: AuthClient) -> None:
 
 
 def test_get_unknown_agent_run_returns_typed_404(auth_client: AuthClient) -> None:
-    response = auth_client.client.get("/agent-runs/999999")
+    response = auth_client.client.get("/api/agent-runs/999999")
     assert response.status_code == 404
     body = response.json()
     assert body["error"]["code"] == "agent.run_not_found"
 
 
 def test_unauthenticated_trigger_returns_401(client: TestClient) -> None:
-    response = client.post("/agents/rto_mitigator/run")
+    response = client.post("/api/agents/rto_mitigator/run")
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "auth.unauthenticated"
 
@@ -140,14 +140,15 @@ def test_two_merchants_agent_runs_are_isolated(auth_client: AuthClient) -> None:
 
     from munim.main import create_app
 
-    auth_client.client.post("/agents/rto_mitigator/run").raise_for_status()
+    auth_client.client.post("/api/agents/rto_mitigator/run").raise_for_status()
     a_ids = {
-        item["run_log_id"] for item in auth_client.client.get("/agent-runs").json()["data"]["items"]
+        item["run_log_id"]
+        for item in auth_client.client.get("/api/agent-runs").json()["data"]["items"]
     }
 
     with _TestClient(create_app()) as b:
-        b.post("/auth/start", json={"display_name": "Bravo"}).raise_for_status()
-        b.post("/agents/rto_mitigator/run").raise_for_status()
-        b_ids = {item["run_log_id"] for item in b.get("/agent-runs").json()["data"]["items"]}
+        b.post("/api/auth/start", json={"display_name": "Bravo"}).raise_for_status()
+        b.post("/api/agents/rto_mitigator/run").raise_for_status()
+        b_ids = {item["run_log_id"] for item in b.get("/api/agent-runs").json()["data"]["items"]}
 
     assert a_ids.isdisjoint(b_ids)

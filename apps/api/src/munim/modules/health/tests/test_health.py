@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 
 def test_health_returns_success_envelope(client: TestClient) -> None:
-    response = client.get("/health")
+    response = client.get("/api/health")
 
     assert response.status_code == 200
     body = response.json()
@@ -20,7 +20,7 @@ def test_health_returns_success_envelope(client: TestClient) -> None:
 
 
 def test_response_trace_id_matches_header(client: TestClient) -> None:
-    response = client.get("/health")
+    response = client.get("/api/health")
 
     body_trace = response.json()["trace_id"]
     header_trace = response.headers.get("x-trace-id")
@@ -30,7 +30,7 @@ def test_response_trace_id_matches_header(client: TestClient) -> None:
 
 def test_inbound_trace_id_is_preserved(client: TestClient) -> None:
     incoming = "tr_01JABCDEFGHIJKLMNOPQRSTUVW"
-    response = client.get("/health", headers={"X-Trace-Id": incoming})
+    response = client.get("/api/health", headers={"X-Trace-Id": incoming})
 
     body = response.json()
     assert body["trace_id"] == incoming
@@ -38,7 +38,7 @@ def test_inbound_trace_id_is_preserved(client: TestClient) -> None:
 
 
 def test_invalid_inbound_trace_id_is_replaced(client: TestClient) -> None:
-    response = client.get("/health", headers={"X-Trace-Id": "not-a-trace-id"})
+    response = client.get("/api/health", headers={"X-Trace-Id": "not-a-trace-id"})
 
     body = response.json()
     assert body["trace_id"].startswith("tr_")

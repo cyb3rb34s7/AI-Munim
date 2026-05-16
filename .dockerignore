@@ -1,0 +1,41 @@
+# Build artifacts and large caches that the Docker image should never pull in.
+node_modules
+**/node_modules
+.venv
+**/.venv
+__pycache__
+**/__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+dist
+**/dist
+build
+**/build
+
+# Local secrets — never bake into an image.
+apps/api/.env
+.env
+
+# Local SQLite database files.
+*.sqlite
+**/*.sqlite
+apps/api/data/*.sqlite
+
+# VCS + IDE.
+.git
+.gitignore
+.github/workflows
+.vscode
+.idea
+
+# Local dev logs.
+.*.log
+.*.err.log
+
+# Docs we don't need in the image.
+docs

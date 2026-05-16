@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: munim
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /api/health
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:////data/munim.sqlite
+      - key: APP_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: SESSION_HTTPS_ONLY
+        value: "true"
+      - key: CREDENTIALS_ENCRYPTION_KEY
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SHOPIFY_OAUTH_ENABLED
+        value: "false"
+      # Real Shopify OAuth requires a Partner Dashboard config the
+      # reviewer doesn't have; deployed env keeps these as placeholders so
+      # config validation passes at startup. The connector code reads them
+      # but the SPA never triggers the OAuth flow when
+      # SHOPIFY_OAUTH_ENABLED is false.
+      - key: SHOPIFY_CLIENT_ID
+        value: deployed-no-oauth
+      - key: SHOPIFY_CLIENT_SECRET
+        value: deployed-no-oauth
+      - key: SHOPIFY_OAUTH_REDIRECT_URI
+        value: http://localhost/no-oauth
+      - key: SHOPIFY_DEFAULT_SHOP_DOMAIN
+        value: example.myshopify.com

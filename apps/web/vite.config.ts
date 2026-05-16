@@ -16,12 +16,14 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // Dev proxy: /api/* on the frontend forwards to the FastAPI backend.
-      // Production deploys hit the API host directly via VITE_API_URL.
+      // Dev proxy: /api/* on the frontend forwards to the FastAPI backend
+      // WITHOUT stripping the prefix — the backend now mounts every router
+      // under /api so dev and prod routes match without conditional logic.
+      // Phase 7 IPv4 fix preserved: 127.0.0.1, not 'localhost', dodges the
+      // Windows ::1 → wrong-service collision.
       '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
-        rewrite: (incoming) => incoming.replace(/^\/api/, ''),
       },
     },
   },

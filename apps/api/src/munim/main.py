@@ -21,6 +21,7 @@ from munim.shared.logging import configure_logging, get_logger
 from munim.shared.trace import TraceIdMiddleware
 
 SESSION_COOKIE_NAME = "munim_session"
+API_PREFIX = "/api"
 
 
 @asynccontextmanager
@@ -57,12 +58,12 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(TraceIdMiddleware)
     install_error_handlers(app)
-    app.include_router(health_router)
-    app.include_router(auth_router)
-    app.include_router(connectors_router)
-    app.include_router(records_router)
-    app.include_router(chat_router)
-    app.include_router(agent_runs_router)
+    app.include_router(health_router, prefix=API_PREFIX)
+    app.include_router(auth_router, prefix=API_PREFIX)
+    app.include_router(connectors_router, prefix=API_PREFIX)
+    app.include_router(records_router, prefix=API_PREFIX)
+    app.include_router(chat_router, prefix=API_PREFIX)
+    app.include_router(agent_runs_router, prefix=API_PREFIX)
     if settings.frontend_dist_path:
         _mount_frontend(app, Path(settings.frontend_dist_path))
     return app
