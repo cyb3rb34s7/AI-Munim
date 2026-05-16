@@ -19,6 +19,30 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-16 — Phase 9 multi-tenant backbone + deployment
+
+**What changed:** Phase 9 closes the brief's remaining gap — the scaling claim moves from "future-tense paragraph" to "tested property of the running system." Every visitor to the deployed URL gets a fresh `Merchant` + `User` row, a signed anonymous session cookie, and 96 pre-seeded demo rows isolated from every other visitor.
+
+- **Anonymous session cookie via starlette `SessionMiddleware`** — HMAC-signed cookie (itsdangerous), `same_site="lax"`, 30-day max-age. Carries `{merchant_id, user_id}`.
+- **`POST /auth/start`** mints `Merchant` + `User`, seeds 96 demo rows synchronously (6 Shopify orders + 40 Meta insights + 50 Shiprocket shipments), sets the cookie, returns `CurrentUser`. **`GET /auth/me`** returns the current user (401 with `auth.unauthenticated` if no session). **`POST /auth/logout`** clears the session.
+- **`get_current_merchant_id` FastAPI dependency** — typed 401 `UnauthenticatedError` when the session is missing. NO silent fallback to a default merchant.
+- **Every router refactored.** Connectors, records, chat, agents now read `merchant_id` via `Depends(get_current_merchant_id)`. `DEFAULT_MERCHANT_ID` stays in `shared/db.py` as a TEST-ONLY constant; `init_db` no longer auto-creates it.
+- **Shopify fixture for Phase 9 demo** — `apps/api/src/munim/connectors/shopify/fixtures/orders.json` — 6 real-shape Shopify orders with customer emails matching the Shiprocket fixture's curated customers, so the cross-connector hash join lands immediately on first agent run.
+- **Frontend:** new `AuthProvider` + `ProtectedRoute` + LandingPage + StartPage. `ky` now ships `credentials: 'include'` so the signed cookie rides every request. Connectors page hides the real Shopify Connect button when `VITE_SHOPIFY_OAUTH_ENABLED !== 'true'`. Phase 8 cleanup: dead `useConnectMutation` + `postConnect` deleted; `ConnectorsGrid`'s silent `return null` replaced with `<EmptyState>`.
+- **All FastAPI routers now mount under `/api`.** Dev and prod URLs match without conditional logic. The Vite dev proxy stops stripping `/api`; `SHOPIFY_OAUTH_REDIRECT_URI` updated to `/api/connectors/shopify/oauth/callback`.
+- **Deployment:** multi-stage `Dockerfile` (Node 22 alpine builds the SPA; Python 3.11 slim runs uvicorn + serves the dist as static). `render.yaml` declares a `web` service with a 1GB persistent disk at `/data` and auto-generated `SESSION_SECRET`/`CREDENTIALS_ENCRYPTION_KEY`. Local `docker build -t munim:phase9 . && docker run -p 18000:8000 ...` succeeds; both `/api/health` and `/api/auth/start` work in the container.
+- **`auth_client` conftest fixture** — new TestClient pre-seeded with a fresh session cookie via `POST /api/auth/start`. Existing protected-endpoint tests migrated; each module gets one unauthenticated-path test (401) plus isolation spot-checks on records, connectors, and agent-runs.
+- **Architecture §10 rewritten.** Multi-tenant moves from rank 6 ("v0 has no auth") to rank 6 with concrete Phase 10 description; sync orchestration moves to rank 1; "what we built to absorb the future" is reframed as tested behaviour.
+- **README rewritten.** Live-demo link, four-bullet citation contract, four-bullet agent description, honest-limitations section, tech-choices defenses.
+
+**Why:** The brief's "≥10k merchants" scalability story was the last gap — the rest of the system already had `merchant_id` on every row, but a reviewer reading the docs had to take it on faith. Phase 9 turns that into a property the reviewer can verify by opening an incognito window: each visitor is a real merchant, isolation is tested, and the Postgres migration is one config change.
+
+**Files touched:** `apps/api/src/munim/models/user.py` (new), `apps/api/src/munim/modules/auth/**` (new), `apps/api/src/munim/main.py` (SessionMiddleware + /api prefix + static mount), `apps/api/src/munim/modules/{connectors,records,chat,agent_runs}/router.py` (Depends), `apps/api/src/munim/shared/{config,constants,db}.py`, `apps/api/conftest.py` (auth_client fixture), `apps/web/src/modules/auth/**` (new), `apps/web/src/pages/{LandingPage,StartPage}.tsx` (new), `apps/web/src/{main,router,shared/api/client}.tsx?`, `Dockerfile` + `render.yaml` + `.dockerignore`, `docs/architecture.md` §10, `README.md`.
+
+**Reverts cleanly?:** yes. The session cookie is additive — removing the auth router + dependency would leave the rest of the multi-tenant code intact (it would just always read `DEFAULT_MERCHANT_ID`). The `/api` prefix change is a one-line rollback in `main.py` + the Vite proxy + every test path.
+
+---
+
 ## 2026-05-15 — Phase 8 review fixes + cross-connector smoke
 
 **What changed:** Reviewer surfaced 4 CRITICAL + 9 IMPORTANT findings; all CRITICAL and the actionable IMPORTANT items addressed in one fix commit.
