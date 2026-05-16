@@ -17,6 +17,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "tzdata>=2024.2",
     "itsdangerous>=2.2",
+    "psycopg2-binary>=2.9",
 ]
 
 [dependency-groups]

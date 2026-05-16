@@ -27,7 +27,16 @@ DEFAULT_MERCHANT_ID = "m_default"
 @lru_cache
 def get_engine() -> Engine:
     settings = get_settings()
-    return create_engine(settings.database_url, **_engine_kwargs(settings.database_url))
+    url = _normalize_database_url(settings.database_url)
+    return create_engine(url, **_engine_kwargs(url))
+
+
+def _normalize_database_url(url: str) -> str:
+    # Render's PG `connectionString` property returns `postgres://...`; SQLAlchemy
+    # 2.0 dropped that alias and requires `postgresql://...`. One-line rewrite.
+    if url.startswith("postgres://"):
+        return "postgresql://" + url[len("postgres://") :]
+    return url
 
 
 def init_db() -> None:

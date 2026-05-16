@@ -1,3 +1,10 @@
+databases:
+  - name: munim-db
+    plan: free
+    databaseName: munim
+    user: munim
+    postgresMajorVersion: "16"
+
 services:
   - type: web
     name: munim
@@ -6,13 +13,11 @@ services:
     plan: free
     autoDeploy: false
     healthCheckPath: /api/health
-    disk:
-      name: data
-      mountPath: /data
-      sizeGB: 1
     envVars:
       - key: DATABASE_URL
-        value: sqlite:////data/munim.sqlite
+        fromDatabase:
+          name: munim-db
+          property: connectionString
       - key: APP_ENV
         value: production
       - key: SESSION_SECRET
@@ -27,9 +32,9 @@ services:
         value: "false"
       # Real Shopify OAuth requires a Partner Dashboard config the
       # reviewer doesn't have; deployed env keeps these as placeholders so
-      # config validation passes at startup. The connector code reads them
-      # but the SPA never triggers the OAuth flow when
-      # SHOPIFY_OAUTH_ENABLED is false.
+      # config validation passes at startup. Both endpoints raise
+      # FeatureDisabledError when SHOPIFY_OAUTH_ENABLED is false, so the
+      # placeholder values are never actually used.
       - key: SHOPIFY_CLIENT_ID
         value: deployed-no-oauth
       - key: SHOPIFY_CLIENT_SECRET
