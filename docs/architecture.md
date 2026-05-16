@@ -582,39 +582,43 @@ The acknowledgment of `bfrs/shiprocket-mcp` in §15 remains genuine — it shape
 
 ---
 
-## 10. Scale story — 1 merchant to 10,000
+## 10. Scale story — 1 visitor to 10,000
 
-The v0 runs for one merchant on SQLite. Here is what breaks first as we scale, in order, and what we did or sketched to absorb it.
+Phase 9 turned the scale claim from "future tense paragraph" into "demonstrated property of the running system." Every visitor to the deployed URL becomes a real `Merchant` with an isolated dataset, authenticated by a signed cookie. The list below is what breaks first as visitor count grows, ranked.
 
 ### 10.1. What breaks first, ranked
 
 | Rank | What breaks | When | Mitigation in v0 | Mitigation at scale |
 |---|---|---|---|---|
-| 1 | **Connector rate limits.** Shopify Admin API ~2 req/sec/store, Meta Marketing API quota-based, Shiprocket undocumented but low. | First 5–20 merchants on a shared key | Per-connector rate limit decorator on each `sync_*` call; exponential backoff with jitter | Per-merchant token buckets in Redis; tiered sync (hot/warm/cold); webhook-first where supported (Shopify), polling-only where not (Shiprocket) |
-| 2 | **Sync orchestration.** Inline `await sync_full()` is fine for 1 merchant; not for 10k. | ~50–100 merchants | APScheduler in-process scheduler | Temporal or Celery workers, idempotent activities, per-merchant queue |
-| 3 | **Database contention.** SQLite is fine read-heavy single-writer; not fine multi-tenant write. | ~10–50 merchants | `merchant_id` is everywhere, every query is scoped, even though there's only one merchant in v0 | Postgres with declarative partition on `record` by `merchant_id` (and sub-partition by `entity_type` if needed); read replicas for chat queries. Only one table to partition. |
-| 4 | **LLM cost.** Reasoning calls per chat are bounded but agent runs accumulate. | First 100 merchants if agent fires every 30 min on a frontier model | Routing-vs-reasoning split (cheap `gpt-4o-mini` for routing, Sonnet for final synthesis); agent uses cheap model + deterministic scoring code | Cache tool results within session; per-merchant LLM budget; fall back to local small models for routing when ROI of the cloud call is low |
+| 1 | **Sync orchestration.** Per-merchant seed runs inline in `POST /auth/start` (Shopify fixture write + Meta + Shiprocket `sync_full`). At ~96 rows per visitor that's well under a second; at 50 concurrent visitors during a hiring review, the OS scheduler covers it. Beyond that, blocked workers wait. | First few hundred concurrent `/auth/start` calls | The seed is bounded and idempotent — re-runs upsert via the natural key. A retry doesn't double-write. | Temporal/Celery worker pool: enqueue per-merchant seed as a job; SSE-stream progress back to the SPA; idempotency keys mean retries are safe. |
+| 2 | **Connector rate limits.** Shopify Admin API ~2 req/sec/store, Meta Marketing API quota-based, Shiprocket undocumented but low. | First 5–20 merchants on real OAuth (deployed env runs demo-only so this doesn't bite the demo) | Per-connector rate limit decorator on each `sync_*` call; exponential backoff with jitter | Per-merchant token buckets in Redis; tiered sync (hot/warm/cold); webhook-first where supported (Shopify), polling-only where not (Shiprocket) |
+| 3 | **Database contention.** SQLite is fine read-heavy single-writer; not fine multi-tenant write. Demo seeding writes ~96 rows per `/auth/start` so the writer-lock bottleneck shows up under burst. | ~10–50 concurrent seeders | `merchant_id` is on every row, every query is scoped — proven in Phase 9 by the isolation tests | The Postgres migration is one `DATABASE_URL` change: SQLModel speaks both. Declarative partition on `record` by `merchant_id`; row-level security is one DDL change. |
+| 4 | **LLM cost.** Reasoning calls per chat are bounded but agent runs accumulate. 50 reviewers chatting 5 times each ≈ 250 LLM calls. | First 100 merchants if agent fires every 30 min on a frontier model | Routing-vs-reasoning split (cheap `gpt-4o-mini` for routing, Sonnet for final synthesis); agent uses cheap model + deterministic scoring code | Cache tool results within session; per-merchant LLM budget; fall back to local small models for routing when ROI of the cloud call is low |
 | 5 | **Run log growth.** Every chat, every tool call, every agent run is persisted. | ~1000 merchants × 30-day retention | Bounded retention (90 days default), aggregated counters | Move run logs to a column store (ClickHouse or DuckDB); keep last 30 days hot, archive cold |
-| 6 | **Multi-tenant isolation.** v0 has no auth. | Day 1 of paying customers | Single-tenant deployment, key-based isolation in fixtures | Per-merchant Postgres schema or row-level security; per-merchant encryption keys for `connector_credentials.auth_blob_encrypted` |
+| 6 | **Multi-tenant isolation (auth).** Phase 9 shipped anonymous session cookies — sufficient for a hiring demo but not for paying customers (a determined attacker with another visitor's cookie value gets their session). | Day 1 of real customers | Anonymous session cookies for v0 demo; row-level scoping proven by isolation tests | Real auth (email/password, magic link, or OAuth providers); per-merchant encryption keys for `connector_credentials.auth_blob_encrypted`. Phase 10 work. |
 | 7 | **Citation verification cost.** Every response is post-processed; every claim resolved. | ~50,000 chats/day | Linear scan over `text` is cheap (~ms) | Same approach scales; nothing to do |
 
 ### 10.2. What we built in v0 to absorb the future
 
-These design choices cost us no time today but unlock the scale-out:
+These design choices cost us no time today but unlock the scale-out — and Phase 9 turned most of them from "design claim" into "tested behaviour":
 
-- **`merchant_id` on every row** even though there is one merchant
-- **Single-table polymorphic schema** — partition by `merchant_id` on one table instead of seven
-- **Connector classes are stateless objects** — they accept context, return rows. Trivially parallelised.
-- **`SyncContext`/`RowSink` abstraction** — switching from inline write to a queue is one class
-- **`run_log` is append-only** — easy to ship to a column store later
-- **PydanticAI provider abstraction** — switching models doesn't touch tool definitions
-- **Connector + tool layers are MCP-ready** — adding an MCP wrapper later does not change the chat or schema
+- **`merchant_id` on every row** — proven under N independent visitors during the demo. Every row, every query, every test isolation assertion.
+- **Anonymous session cookie + per-visitor merchant + per-merchant pre-seeding** — `POST /auth/start` creates a fresh `Merchant` + `User` row, seeds 96 demo rows, sets a signed cookie. Each visitor's data is fully isolated.
+- **Single-table polymorphic schema** — partition by `merchant_id` on one table instead of seven.
+- **Connector classes are stateless objects** — they accept context, return rows. Trivially parallelised across visitor seed jobs.
+- **`SyncContext`/`RowSink` abstraction** — switching from inline write to a queue is one class.
+- **`run_log` is append-only** — easy to ship to a column store later.
+- **PydanticAI provider abstraction** — switching models doesn't touch tool definitions.
+- **Connector + tool layers are MCP-ready** — adding an MCP wrapper later does not change the chat or schema.
+- **The Postgres migration is one `SQLALCHEMY_DATABASE_URL` change.** Row-level security is one DDL change.
 
 ### 10.3. What we sketched but did not build
 
-- A `load_test.py` script that fans out N concurrent fake-merchant sync runs and measures throughput.
-- A Postgres migration plan: `alembic` baseline already in the project (no migrations needed yet, but the harness is there).
-- A Redis-backed rate limiter (the interface exists in `connectors.rate_limit`; the in-memory and Redis implementations both implement the same interface; we ship the in-memory one).
+- `scripts/loadtest_visitors.py` — N parallel visitors hitting `/auth/start` + `/chat` + `/agents/.../run`, measuring p50/p95/p99 of each. Not in v0; the test harness already covers per-merchant correctness, but it doesn't pin the concurrency ceiling.
+- Real auth (email/password / magic link / OAuth providers) — Phase 10 if the deadline allows.
+- WebSockets / SSE for chat streaming — the chat endpoint currently waits for the LLM to finish before responding. Streaming is a UX win, not a correctness one.
+- Webhook ingestion for connectors — polling-only sync today.
+- A Redis-backed rate limiter (the interface exists in `connectors.rate_limit`; we ship the in-memory implementation).
 
 This satisfies FR-5.1, FR-5.2, FR-5.3.
 

@@ -2,21 +2,22 @@
 
 > Every kirana shop had a munim — the bookkeeper who sat in the corner, kept all the ledgers, watched the stock, advised on margins, and noticed when something was off. Modern D2C founders have Excel and vibes. AI-Munim is the modern munim: an AI employee for Indian D2C brands that reads across their SaaS tools, answers cross-tool questions with citations on every number, and proactively flags ₹-saving actions.
 
-> **Status:** v0 in flight. Documentation is committed first; code follows in subsequent phases.
+**Try the live demo:** open the deployed URL, click "Try the live demo", optionally type a display name, and you land on a private workspace pre-populated with realistic Shopify, Meta Ads, and Shiprocket data. No sign-up.
 
 ---
 
 ## Table of contents
 
-- [What we built](#what-we-built)
-- [Quickstart](#quickstart)
-- [Connectors — which 3 and why these 3](#connectors--which-3-and-why-these-3)
+- [What it is](#what-it-is)
+- [Try the live demo](#try-the-live-demo)
+- [Run locally](#run-locally)
+- [How the citation contract works](#how-the-citation-contract-works)
+- [How the agent works](#how-the-agent-works)
+- [Connectors — which 3 and why](#connectors--which-3-and-why)
 - [Schema — why this shape](#schema--why-this-shape)
-- [Chat — tool schema and how citation works](#chat--tool-schema-and-how-citation-works)
-- [Agent — what it does and why this one](#agent--what-it-does-and-why-this-one)
-- [Scale — 1 merchant to 10,000](#scale--1-merchant-to-10000)
-- [Eval — where it breaks](#eval--where-it-breaks)
-- [Hours, days, sessions](#hours-days-sessions)
+- [Scale — demonstrated, not aspirational](#scale--demonstrated-not-aspirational)
+- [Honest limitations](#honest-limitations)
+- [Tech choices](#tech-choices)
 - [What we'd do with another week](#what-wed-do-with-another-week)
 - [AI tool usage — honest accounting](#ai-tool-usage--honest-accounting)
 - [Deeper docs](#deeper-docs)
@@ -24,38 +25,87 @@
 
 ---
 
-## What we built
+## What it is
 
-A working v0 of an AI employee for Indian D2C brands. Five-line architecture summary:
+A v0 of an AI employee for Indian D2C brands, built as a hiring assignment.
 
-1. **Three connectors behind one abstraction** — Shopify, Meta Ads, Shiprocket — pulling into one universal single-table polymorphic store with row-level provenance.
-2. **A chat layer** built on PydanticAI with a strict citation contract: every numerical claim is wrapped with `[cite:record_id]` markers, post-processed fail-closed so uncited numbers never reach the user.
-3. **An autonomous agent — the RTO Risk Mitigator** — runs on a cron schedule, scans new COD orders, scores RTO risk from cross-tool signals, proposes intercept actions without ever sending them.
-4. **A scaling story** — concrete ranking of what breaks first as we go from 1 merchant to 10,000, with the parts of v0 that were built deliberately to absorb the future.
-5. **A web UI** in Next.js + shadcn/ui + Vercel AI SDK, with one-click connector setup and inline generative artifacts (A2UI-shaped render specs).
+1. **Three connectors behind one abstraction.** Shopify (real OAuth + Admin API), Meta Ads (40-row demo fixture), Shiprocket (50-row demo fixture). All three land in one universal single-table polymorphic store with row-level provenance — `merchant_id`, `source_system`, `source_id`, `fetched_at`, `payload_hash`, plus the raw source payload and the canonical `Order`/`Shipment`/`AdSpend` shape.
 
-The stack is hybrid: **Python FastAPI for the backend** (PydanticAI, SQLite + JSON columns, mature LLM/data tooling) and **Next.js for the frontend** (Vercel AI SDK 5 streaming, shadcn/ui polish, artifacts in chat). Vercel officially supports this pattern.
+2. **A chat layer with a strict citation contract.** Every numerical claim is wrapped with `[cite:record_id]` markers. Four layers enforce this — tool return shape, structured output, citation validation, fail-closed post-processor. Uncited numbers never reach the user.
 
-## Quickstart
+3. **A deterministic agent — the RTO Risk Mitigator.** Manual trigger via `POST /agents/rto_mitigator/run`. Scans new COD orders, scores RTO risk from named signals (customer's past RTO rate via the cross-connector hash, pincode risk, order-value band, time of order), proposes one of three actions: `convert_to_prepaid`, `confirmation_call`, `no_action`. Writes the full reasoning to `run_log`. Never actually sends anything.
 
-> Once the code lands. The doc structure is committed; the runtime layer follows.
+4. **Anonymous multi-tenant backbone, demonstrated.** Every visitor to the deployed URL gets a fresh `Merchant` row, a signed session cookie, and 96 pre-seeded demo rows isolated from every other visitor. The "scale story" is no longer a paragraph — it's a tested property of the running system.
+
+5. **A web UI** — Vite + React 19 + Tailwind v4 with a lavender token system, shadcn-style primitives on Radix, framer-motion, Sonner toasts.
+
+The stack is hybrid: **Python FastAPI for the backend** (PydanticAI, SQLite + JSON columns) and **React for the frontend** (TanStack Query for server state, Zustand for UI state, ky for HTTP). One Render service runs both: FastAPI serves `/api/*` and mounts the built SPA at `/`.
+
+## Try the live demo
+
+Open the deployed URL (Render) and click **Try the live demo**. Reasonable walk:
+
+1. Land on the chat page. Ask "How many orders do I have?" — the response cites 6 orders from Shopify.
+2. Hit `/agents` and click "Run agent now". A row appears in the feed; click it to see the per-order decisions. `rohan@example.com`'s COD order (₹4,599 to pincode 110001, 22:48 IST) proposes `convert_to_prepaid` with the cross-connector RTO history driving the score.
+3. Hit `/records` to see the 96 rows mixed across Shopify, Meta Ads, and Shiprocket. Click a row to drill into raw + normalized.
+4. Hit `/connectors` to see all three cards as "demo / connected".
+5. Open an incognito window, click "Try the live demo" again — completely fresh merchant, independent data, independent agent run history.
+
+## Run locally
 
 ```bash
 git clone https://github.com/cyb3rb34s7/AI-Munim.git
 cd AI-Munim
-cp .env.example .env                  # add OpenAI/Anthropic keys (optional in demo mode)
-docker-compose up                     # api on :8000, web on :3000
+cp .env.example apps/api/.env  # fill in SESSION_SECRET, CREDENTIALS_ENCRYPTION_KEY, OPENAI_API_KEY
 
-# In a separate terminal:
-docker-compose exec api uv run munim seed   # populate the SQLite store with realistic fixtures
+# Backend (terminal 1):
+cd apps/api
+uv sync
+uv run uvicorn munim.main:app --host 127.0.0.1 --port 8000 --reload
 
-# Open http://localhost:3000 and start chatting.
-# Or open http://localhost:3000/settings/connectors and click "Connect".
+# Frontend (terminal 2):
+cd apps/web
+pnpm install
+pnpm dev   # http://localhost:5173
+
+# Open http://localhost:5173 and click "Try the live demo".
 ```
 
-Demo mode runs without any external API keys against seeded fixtures. The chat, the citations, and the agent all work end-to-end.
+Or build the single-image production container:
 
-## Connectors — which 3 and why these 3
+```bash
+docker build -t munim .
+docker run -p 8000:8000 \
+  -e SESSION_SECRET=$(python -c 'import secrets; print(secrets.token_urlsafe(32))') \
+  -e CREDENTIALS_ENCRYPTION_KEY=$(python -c 'import secrets; print(secrets.token_urlsafe(32))') \
+  -e OPENAI_API_KEY=sk-... \
+  -e SHOPIFY_OAUTH_ENABLED=false \
+  -e SHOPIFY_CLIENT_ID=ignored -e SHOPIFY_CLIENT_SECRET=ignored \
+  -e SHOPIFY_OAUTH_REDIRECT_URI=http://localhost/no-oauth \
+  -e SHOPIFY_DEFAULT_SHOP_DOMAIN=example.myshopify.com \
+  munim
+# Open http://localhost:8000 — SPA + API on one port.
+```
+
+## How the citation contract works
+
+Four layers, all must hold:
+
+1. **Tool return shape** — every chat tool emits `{ data, citations: list[RowCitation] }`. Tools know which `record` rows they touched; the LLM just quotes them.
+2. **Structured output** — the LLM's final answer is forced into a Pydantic `GroundedAnswer` shape: `text` (with `[cite:record_id]` markers inline) + `used_citations`. No free-form prose.
+3. **Validation** — every `[cite:N]` marker is checked against the citations the tools returned. Hallucinated record ids fail validation → retry once → error.
+4. **Fail-closed post-processor** — regex pass over `text` finds any free-floating number not inside a `[cite:...]` marker and replaces it with `[unverified number removed]`. If the scanner errors, we reject the whole response.
+
+## How the agent works
+
+The RTO Risk Mitigator. Run via `POST /agents/rto_mitigator/run`. Four bullets:
+
+1. **Signals are pure functions.** `customer_rto_rate` (joins to Shiprocket via the SHA-256 customer hash), `pincode_risk`, `order_value_band`, `time_of_order_risk` (IST-local, not UTC — Phase 6 paid lesson).
+2. **Scoring is a weighted sum + threshold tree.** `Decimal` end-to-end for money. Weights are module-level constants; thresholds split into `convert_to_prepaid` / `confirmation_call` / `no_action`.
+3. **One `RunLog` row per run.** `detail_json` carries the per-order signal scores, weights, action, estimated ₹ saved, and a one-line reasoning string.
+4. **Zero outbound HTTP.** `respx.mock` test locks this for the httpx layer; the agent is purely a reasoning + scoring pass over local data.
+
+## Connectors — which 3 and why
 
 **Shopify + Meta Ads + Shiprocket.**
 
@@ -162,50 +212,57 @@ Three reasons, all checkable:
 
 Full design in [`docs/architecture.md` §8](docs/architecture.md).
 
-## Scale — 1 merchant to 10,000
+## Scale — demonstrated, not aspirational
 
-Honest, ranked, with mitigations.
+Phase 9 turned the scaling claim from "future tense paragraph" into "tested property of the running system." Every visitor to the deployed URL becomes a real `Merchant` with its own 96-row dataset, isolated by `merchant_id` on every query. Isolation tests assert that data from merchant A is not visible from merchant B's session.
 
-| Rank | What breaks first | When | What v0 does | At scale |
-|---|---|---|---|---|
-| 1 | **Connector rate limits** (Shopify ~2/s, Meta quota, Shiprocket low) | 5–20 merchants on shared keys | Per-connector rate-limit decorator, exponential backoff | Per-merchant token buckets in Redis; tiered sync; webhooks where supported |
-| 2 | **Sync orchestration** (inline awaits) | 50–100 merchants | APScheduler in-process | Temporal/Celery workers, idempotent activities, per-merchant queue |
-| 3 | **DB contention** (SQLite is single-writer) | 10–50 merchants | `merchant_id` in every primary key already | Postgres + partition by `merchant_id` on hot tables; read replicas |
-| 4 | **LLM cost** | 100+ merchants with frequent agent runs | Routing-vs-reasoning split (cheap `gpt-4o-mini` for routing, Sonnet for synthesis); deterministic scoring in agent | Tool-result caching; per-merchant LLM budgets; local small models for routing |
-| 5 | **Run log growth** | 1000+ merchants | 90-day retention default, append-only | ClickHouse/DuckDB column store for cold data |
-| 6 | **Multi-tenant isolation** (v0 has no auth) | Day 1 paying | Single-tenant; key-based fixture isolation | Per-merchant Postgres schema or RLS; per-merchant encryption keys |
+Ranked failure modes (full version in [`docs/architecture.md` §10](docs/architecture.md)):
 
-**What v0 deliberately built to absorb the future:**
+| Rank | What breaks first | When | At scale |
+|---|---|---|---|
+| 1 | **Sync orchestration** — per-merchant seed runs inline in `/auth/start` | Few hundred concurrent visitors | Worker pool (Temporal/Celery) with per-merchant jobs and SSE progress |
+| 2 | **Connector rate limits** (Shopify ~2/s, Meta quota, Shiprocket low) | First 5–20 merchants on real OAuth | Per-merchant token buckets in Redis; tiered sync; webhooks where supported |
+| 3 | **DB contention** (SQLite is single-writer) | 10–50 concurrent seeders | The Postgres migration is one `DATABASE_URL` change; SQLModel speaks both. Partition by `merchant_id`. |
+| 4 | **LLM cost** | 100+ merchants with frequent agent runs | Tool-result caching; per-merchant LLM budgets; local small models for routing |
+| 5 | **Run log growth** | 1000+ merchants | ClickHouse/DuckDB column store for cold data |
+| 6 | **Auth.** Anonymous session cookies are a demo mechanism, not real auth | Day 1 of paying customers | Real auth (email/password, magic link, OAuth providers) — Phase 10 |
 
-- `merchant_id` on every row
-- Single-table polymorphic schema — partition by `merchant_id` on one table, not seven
-- Connectors are stateless objects, trivially parallelisable
-- `SyncContext`/`RowSink` abstraction so inline writes become queue writes with no schema change
-- Append-only `run_log` ready to ship to a column store
-- PydanticAI provider abstraction — model swaps don't touch tool definitions
-- Connector + tool layers are MCP-ready — wrapping them as an MCP server later does not touch chat or schema
+**What v0 built deliberately to absorb the future** (all of these are now tested behaviour, not design claims):
 
-**Sketched but not built:** load-test harness (script outlined), Redis rate limiter (interface present, only the in-memory impl ships), Postgres baseline (Alembic in repo, no migrations yet).
+- `merchant_id` on every row, every query, every test isolation assertion.
+- Anonymous session cookie + per-visitor merchant + per-merchant pre-seeding via `POST /auth/start`.
+- Single-table polymorphic schema — partition by `merchant_id` on one table, not seven.
+- Connectors are stateless objects, trivially parallelisable across visitor seed jobs.
+- `SyncContext`/`RowSink` abstraction so inline writes become queue writes with no schema change.
+- Append-only `run_log` ready to ship to a column store.
+- PydanticAI provider abstraction — model swaps don't touch tool definitions.
 
-Full table with all 7 failure points and concrete mitigations in [`docs/architecture.md` §10](docs/architecture.md).
+**Sketched but not built:** `scripts/loadtest_visitors.py` (N parallel visitors hitting `/auth/start` + `/chat`, measuring p50/p95/p99); real auth; webhook ingestion.
 
-## Eval — where it breaks
+## Honest limitations
 
-We told you the failure modes for the agent. Here are the system-level ones we know about — before you find them.
+- **No real auth.** Session is anonymous. An attacker with another visitor's cookie value gets their session. Acceptable for a hiring demo; deliberate Phase 10 work.
+- **No email; no password reset; no user invites.**
+- **Shopify real OAuth disabled on the deployed env.** Each visitor can't connect their own Shopify store; demo data is the only Shopify path on the deployed URL. The connector code path stays; it's a runtime feature flag.
+- **LLM cost ceiling.** 50 concurrent reviewers chatting 5 times each ≈ 250 LLM calls. Acceptable at current free-tier rate limits.
+- **Render free tier cold start** (~30s on first hit after 15min idle).
+- **SQLite single-writer.** Demo seeding writes ~96 rows per `/auth/start`, fine for the demo; not for paying customers.
+- **Paraphrase verification of citations.** The post-processor catches uncited numbers. It does *not* verify that the number after `[cite:N]` matches the actual value in row N. Mitigation roadmap: numeric-exact comparison against citation rows.
+- **No real OAuth for Meta and Shiprocket.** They ship as demo connectors with frozen fixtures. The `BaseConnector` interface is identical to Shopify's.
+- **Polling only, no webhooks.** Means up to 30 minutes of staleness when the agent is on a real schedule (Phase 6 agent is manual-trigger only for v0).
+- **RTO agent is rule-based.** Weights are sensible defaults, not model-trained. Drift is real; retraining cadence is documented.
+- **Demo fixtures are realistic but synthetic.**
 
-- **Paraphrase verification of citations.** The post-processor catches numbers without citations. It does *not* yet verify that the number after `[cite:N]` matches the value in row N. A determined model could cite row N and still type "₹12 lakh" when row N says "₹12,000." Mitigation roadmap: numeric-exact comparison against citation rows. Not in v0.
-- **Single-tenant.** v0 has no user auth. Every chat is "the merchant." Multi-tenant isolation is sketched, not built.
-- **No real OAuth for Meta and Shiprocket** in v0. They go through a mock OAuth flow with the same UI as the real Shopify OAuth. The connector interface is identical; flipping to real is a per-connector change. Real Shopify OAuth ships in v0.
-- **Polling only, no webhooks.** Means up to 30 minutes of staleness for the agent.
-- **No analytics caching.** Every chat query re-runs against the normalised store. Fine for v0, costly at scale.
-- **RTO agent is rule-based, not learned.** The weights are sensible defaults, not model-trained. Drift is real. Retraining cadence is documented; the actual retraining job is not in v0.
-- **Demo fixtures are realistic but synthetic.** Real merchant data will reveal edge cases (multi-SKU orders, partial fulfilments, exchanges) that the fixtures don't cover.
+## Tech choices
 
-## Hours, days, sessions
+Short defenses for the non-obvious picks:
 
-> *To be finalised on submission.*
->
-> Currently: documentation phase complete. Code phase in flight. We will commit honest numbers here at the end — across however many sessions and days. The commit history shows the cadence.
+- **PydanticAI** over LangChain or raw OpenAI SDK — typed tool inputs/outputs, structured-output validation built in, provider-agnostic. The four-layer citation contract sits cleanly on top of it.
+- **SQLModel** over raw SQLAlchemy — Pydantic + SQLAlchemy in one type. The same `Order` model validates the wire and the row.
+- **Tailwind v4 + lavender token system** — Phase 7's design pass. Token-driven theming so `getComputedStyle` reads at render time keep Recharts cells in sync with the dark/light toggle.
+- **framer-motion** — fadeUp transitions on route changes, AnimatePresence on the agent run feed. Small but tactile.
+- **Render** — single service, persistent disk for SQLite, free tier covers a hiring-review window. One `render.yaml` artifact; the deployment is reproducible.
+- **Vite + React 19** instead of Next.js — the app is a SPA admin UI, no SSR need, no SEO concern. Vite's HMR is sub-second; production build is ~4s.
 
 ## What we'd do with another week
 
