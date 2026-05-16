@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from munim.models import ConnectorCredentials, Merchant, Record, RunLog
+from munim.models import ConnectorCredentials, Record, RunLog
 from munim.shared.constants import (
     ConnectorName,
     CredentialStatus,
@@ -14,12 +14,6 @@ from munim.shared.constants import (
 )
 
 DEFAULT_MERCHANT_ID = "m_default"
-
-
-def test_default_merchant_seeded(session: Session) -> None:
-    merchant = session.get(Merchant, DEFAULT_MERCHANT_ID)
-    assert merchant is not None
-    assert merchant.name == "Default Merchant"
 
 
 def test_record_round_trip(session: Session) -> None:

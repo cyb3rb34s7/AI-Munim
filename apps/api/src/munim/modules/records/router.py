@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, Query, Request
 from sqlmodel import Session
 
+from munim.modules.auth.dependencies import get_current_merchant_id
 from munim.modules.records.schemas import (
     RecordDetail,
     RecordsListResponse,
 )
 from munim.modules.records.service import get_record, list_records
-from munim.shared.db import DEFAULT_MERCHANT_ID, get_session
+from munim.shared.db import get_session
 from munim.shared.responses import SuccessEnvelope
 
 router = APIRouter(prefix="/records", tags=["records"])
@@ -18,11 +19,12 @@ def list_endpoint(
     source_system: str | None = Query(default=None),
     entity_type: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
+    merchant_id: str = Depends(get_current_merchant_id),
     session: Session = Depends(get_session),
 ) -> SuccessEnvelope[RecordsListResponse]:
     data = list_records(
         session,
-        DEFAULT_MERCHANT_ID,
+        merchant_id,
         source_system=source_system,
         entity_type=entity_type,
         limit=limit,
@@ -34,7 +36,8 @@ def list_endpoint(
 def detail_endpoint(
     record_id: int,
     request: Request,
+    merchant_id: str = Depends(get_current_merchant_id),
     session: Session = Depends(get_session),
 ) -> SuccessEnvelope[RecordDetail]:
-    record = get_record(session, DEFAULT_MERCHANT_ID, record_id)
+    record = get_record(session, merchant_id, record_id)
     return SuccessEnvelope(data=record, trace_id=request.state.trace_id)

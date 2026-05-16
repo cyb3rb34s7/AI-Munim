@@ -5,6 +5,7 @@ from fastapi.responses import RedirectResponse
 from sqlmodel import Session
 
 from munim.connectors.registry import ConnectorRegistry, UnknownConnectorError, default_registry
+from munim.modules.auth.dependencies import get_current_merchant_id
 from munim.modules.connectors.demo_connect import connect_demo_endpoint
 from munim.modules.connectors.schemas import (
     ConnectorListResponse,
@@ -22,7 +23,7 @@ from munim.modules.connectors.service import (
 )
 from munim.shared.config import get_settings
 from munim.shared.constants import ConnectorName
-from munim.shared.db import DEFAULT_MERCHANT_ID, get_session
+from munim.shared.db import get_session
 from munim.shared.errors import ValidationFailedError
 from munim.shared.responses import SuccessEnvelope
 
@@ -50,10 +51,11 @@ def _resolve_name(name: str, registry: ConnectorRegistry) -> ConnectorName:
 @router.get("", response_model=SuccessEnvelope[ConnectorListResponse])
 def list_endpoint(
     request: Request,
+    merchant_id: str = Depends(get_current_merchant_id),
     session: Session = Depends(get_session),
     registry: ConnectorRegistry = Depends(_registry_dep),
 ) -> SuccessEnvelope[ConnectorListResponse]:
-    connectors = list_connectors(session, DEFAULT_MERCHANT_ID, registry)
+    connectors = list_connectors(session, merchant_id, registry)
     return SuccessEnvelope(
         data=ConnectorListResponse(connectors=connectors),
         trace_id=request.state.trace_id,
@@ -67,11 +69,12 @@ def list_endpoint(
 def connect_endpoint(
     name: str,
     request: Request,
+    merchant_id: str = Depends(get_current_merchant_id),
     session: Session = Depends(get_session),
     registry: ConnectorRegistry = Depends(_registry_dep),
 ) -> SuccessEnvelope[ConnectResponse]:
     connector_name = _resolve_name(name, registry)
-    view = connect_demo(session, DEFAULT_MERCHANT_ID, connector_name, registry)
+    view = connect_demo(session, merchant_id, connector_name, registry)
     session.commit()
     return SuccessEnvelope(
         data=ConnectResponse(connector=view),
@@ -86,10 +89,11 @@ def connect_endpoint(
 def connect_demo_route(
     name: str,
     request: Request,
+    merchant_id: str = Depends(get_current_merchant_id),
     session: Session = Depends(get_session),
     registry: ConnectorRegistry = Depends(_registry_dep),
 ) -> SuccessEnvelope[ConnectResponse]:
-    view = connect_demo_endpoint(session, DEFAULT_MERCHANT_ID, name, registry)
+    view = connect_demo_endpoint(session, merchant_id, name, registry)
     session.commit()
     return SuccessEnvelope(
         data=ConnectResponse(connector=view),
@@ -104,11 +108,12 @@ def connect_demo_route(
 async def sync_endpoint(
     name: str,
     request: Request,
+    merchant_id: str = Depends(get_current_merchant_id),
     session: Session = Depends(get_session),
     registry: ConnectorRegistry = Depends(_registry_dep),
 ) -> SuccessEnvelope[SyncResponse]:
     connector_name = _resolve_name(name, registry)
-    result = await sync_connector(session, DEFAULT_MERCHANT_ID, connector_name, registry)
+    result = await sync_connector(session, merchant_id, connector_name, registry)
     session.commit()
     return SuccessEnvelope(data=result, trace_id=request.state.trace_id)
 
@@ -121,10 +126,11 @@ def oauth_init_endpoint(
     name: str,
     body: StartOAuthRequest,
     request: Request,
+    merchant_id: str = Depends(get_current_merchant_id),
     registry: ConnectorRegistry = Depends(_registry_dep),
 ) -> SuccessEnvelope[StartOAuthResponse]:
     resolved = _resolve_name(name, registry)  # Validates name + raises UnknownConnectorError
-    resp = start_oauth(DEFAULT_MERCHANT_ID, resolved, body.shop)
+    resp = start_oauth(merchant_id, resolved, body.shop)
     return SuccessEnvelope(data=resp, trace_id=request.state.trace_id)
 
 
@@ -132,6 +138,7 @@ def oauth_init_endpoint(
 async def oauth_callback_endpoint(
     name: str,
     request: Request,
+    merchant_id: str = Depends(get_current_merchant_id),
     session: Session = Depends(get_session),
     registry: ConnectorRegistry = Depends(_registry_dep),
 ) -> RedirectResponse:
@@ -154,7 +161,7 @@ async def oauth_callback_endpoint(
 
     await complete_oauth(
         session,
-        DEFAULT_MERCHANT_ID,
+        merchant_id,
         resolved,
         code=code,
         state=state,

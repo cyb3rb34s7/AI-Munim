@@ -17,8 +17,11 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from munim.shared.config import get_settings
 
+# TEST-ONLY constant. Production code reads merchant_id from the session
+# (see modules/auth/dependencies.py::get_current_merchant_id). Tests that
+# don't want to round-trip through /auth/start can use this id when manually
+# inserting Merchant + Record rows.
 DEFAULT_MERCHANT_ID = "m_default"
-DEFAULT_MERCHANT_NAME = "Default Merchant"
 
 
 @lru_cache
@@ -28,29 +31,18 @@ def get_engine() -> Engine:
 
 
 def init_db() -> None:
-    """Create the universal-schema tables and seed the single-tenant merchant."""
+    """Create the universal-schema tables. No merchant rows seeded on boot."""
     # Importing the models package registers every table on SQLModel.metadata.
     import munim.models  # noqa: F401
 
     engine = get_engine()
     SQLModel.metadata.create_all(engine)
-    _seed_default_merchant(engine)
 
 
 def get_session() -> Generator[Session, None, None]:
     """FastAPI dependency."""
     with Session(get_engine()) as session:
         yield session
-
-
-def _seed_default_merchant(engine: Engine) -> None:
-    from munim.models import Merchant
-
-    with Session(engine) as session:
-        if session.get(Merchant, DEFAULT_MERCHANT_ID) is not None:
-            return
-        session.add(Merchant(id=DEFAULT_MERCHANT_ID, name=DEFAULT_MERCHANT_NAME))
-        session.commit()
 
 
 def _engine_kwargs(url: str) -> dict[str, Any]:

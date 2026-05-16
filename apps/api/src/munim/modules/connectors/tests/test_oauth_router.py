@@ -4,14 +4,15 @@ import time
 
 import httpx
 import respx
+from conftest import AuthClient
 from fastapi.testclient import TestClient
 
 from munim.shared.config import get_settings
 from munim.shared.crypto import sign_state
 
 
-def test_oauth_init_returns_authorize_url(client: TestClient) -> None:
-    response = client.post(
+def test_oauth_init_returns_authorize_url(auth_client: AuthClient) -> None:
+    response = auth_client.client.post(
         "/connectors/shopify/oauth/init",
         json={"shop": "munim-dev.myshopify.com"},
     )
@@ -22,8 +23,8 @@ def test_oauth_init_returns_authorize_url(client: TestClient) -> None:
     )
 
 
-def test_oauth_init_rejects_invalid_shop(client: TestClient) -> None:
-    response = client.post(
+def test_oauth_init_rejects_invalid_shop(auth_client: AuthClient) -> None:
+    response = auth_client.client.post(
         "/connectors/shopify/oauth/init",
         json={"shop": "evil.attacker.com"},
     )
@@ -32,20 +33,29 @@ def test_oauth_init_rejects_invalid_shop(client: TestClient) -> None:
     assert body["error"]["code"] == "connector.invalid_shop_domain"
 
 
-def test_oauth_callback_missing_params_returns_typed_error(client: TestClient) -> None:
+def test_oauth_callback_missing_params_returns_typed_error(auth_client: AuthClient) -> None:
     # Per §10: missing required callback params must not redirect silently.
-    response = client.get("/connectors/shopify/oauth/callback?code=abc")
+    response = auth_client.client.get("/connectors/shopify/oauth/callback?code=abc")
     assert response.status_code == 422
     body = response.json()
     assert body["error"]["code"] == "validation.bad_format"
 
 
+def test_unauthenticated_oauth_init_returns_401(client: TestClient) -> None:
+    response = client.post(
+        "/connectors/shopify/oauth/init",
+        json={"shop": "munim-dev.myshopify.com"},
+    )
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "auth.unauthenticated"
+
+
 @respx.mock
-def test_oauth_callback_full_flow_redirects_to_frontend(client: TestClient) -> None:
+def test_oauth_callback_full_flow_redirects_to_frontend(auth_client: AuthClient) -> None:
     settings = get_settings()
     state = sign_state(
         {
-            "merchant_id": "m_default",
+            "merchant_id": auth_client.merchant_id,
             "shop": "munim-dev.myshopify.com",
             "iat": int(time.time()),
         },
@@ -68,7 +78,7 @@ def test_oauth_callback_full_flow_redirects_to_frontend(client: TestClient) -> N
         return_value=httpx.Response(200, json={"access_token": "shpat_x", "scope": "read_orders"})
     )
 
-    response = client.get(
+    response = auth_client.client.get(
         "/connectors/shopify/oauth/callback",
         params=params,
         follow_redirects=False,
@@ -79,18 +89,18 @@ def test_oauth_callback_full_flow_redirects_to_frontend(client: TestClient) -> N
 
 
 @respx.mock
-def test_oauth_callback_with_bad_hmac_returns_typed_error(client: TestClient) -> None:
+def test_oauth_callback_with_bad_hmac_returns_typed_error(auth_client: AuthClient) -> None:
     settings = get_settings()
     state = sign_state(
         {
-            "merchant_id": "m_default",
+            "merchant_id": auth_client.merchant_id,
             "shop": "munim-dev.myshopify.com",
             "iat": int(time.time()),
         },
         settings.credentials_encryption_key,
     )
     # Note: hmac is intentionally wrong.
-    response = client.get(
+    response = auth_client.client.get(
         "/connectors/shopify/oauth/callback",
         params={
             "code": "abc",

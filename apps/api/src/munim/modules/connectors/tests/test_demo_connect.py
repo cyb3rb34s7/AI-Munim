@@ -1,13 +1,13 @@
-from fastapi.testclient import TestClient
+from conftest import AuthClient
 from sqlmodel import Session, select
 
 from munim.models import ConnectorCredentials
 
 
-def test_connect_demo_writes_credentials_row_with_demo_status(client: TestClient) -> None:
+def test_connect_demo_writes_credentials_row_with_demo_status(auth_client: AuthClient) -> None:
     from munim.shared.db import get_engine
 
-    resp = client.post("/connectors/meta_ads/connect-demo")
+    resp = auth_client.client.post("/connectors/meta_ads/connect-demo")
     assert resp.status_code == 200
     body = resp.json()
     assert body["success"] is True
@@ -17,14 +17,16 @@ def test_connect_demo_writes_credentials_row_with_demo_status(client: TestClient
 
     with Session(get_engine()) as session:
         row = session.exec(
-            select(ConnectorCredentials).where(ConnectorCredentials.connector == "meta_ads")
+            select(ConnectorCredentials)
+            .where(ConnectorCredentials.merchant_id == auth_client.merchant_id)
+            .where(ConnectorCredentials.connector == "meta_ads")
         ).one()
         assert row.status == "demo"
 
 
-def test_connect_demo_is_idempotent_for_repeat_clicks(client: TestClient) -> None:
-    first = client.post("/connectors/shiprocket/connect-demo")
-    second = client.post("/connectors/shiprocket/connect-demo")
+def test_connect_demo_is_idempotent_for_repeat_clicks(auth_client: AuthClient) -> None:
+    first = auth_client.client.post("/connectors/shiprocket/connect-demo")
+    second = auth_client.client.post("/connectors/shiprocket/connect-demo")
     assert first.status_code == 200
     assert second.status_code == 200
 
@@ -32,21 +34,23 @@ def test_connect_demo_is_idempotent_for_repeat_clicks(client: TestClient) -> Non
 
     with Session(get_engine()) as session:
         rows = session.exec(
-            select(ConnectorCredentials).where(ConnectorCredentials.connector == "shiprocket")
+            select(ConnectorCredentials)
+            .where(ConnectorCredentials.merchant_id == auth_client.merchant_id)
+            .where(ConnectorCredentials.connector == "shiprocket")
         ).all()
         assert len(rows) == 1
 
 
-def test_connect_demo_rejects_non_demo_connector(client: TestClient) -> None:
-    resp = client.post("/connectors/shopify/connect-demo")
+def test_connect_demo_rejects_non_demo_connector(auth_client: AuthClient) -> None:
+    resp = auth_client.client.post("/connectors/shopify/connect-demo")
     assert resp.status_code == 400
     body = resp.json()
     assert body["success"] is False
     assert body["error"]["code"] == "connector.not_demo"
 
 
-def test_connect_demo_rejects_unknown_connector(client: TestClient) -> None:
-    resp = client.post("/connectors/madeup/connect-demo")
+def test_connect_demo_rejects_unknown_connector(auth_client: AuthClient) -> None:
+    resp = auth_client.client.post("/connectors/madeup/connect-demo")
     assert resp.status_code == 404
     body = resp.json()
     assert body["success"] is False
