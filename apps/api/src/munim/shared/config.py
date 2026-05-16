@@ -9,6 +9,7 @@ tests clear the cache after monkeypatching env.
 
 from functools import lru_cache
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -43,6 +44,19 @@ class Settings(BaseSettings):
 
     # Frontend URL used by the OAuth callback redirect.
     frontend_base_url: str = "http://localhost:5173"
+
+    # Phase 9 — anonymous session cookie.
+    session_secret: SecretStr
+    session_cookie_max_age_days: int = 30
+    session_https_only: bool = False
+
+    # Phase 9 — deployed-environment toggle: hide the real Shopify Connect
+    # button in the SPA when False; the connector code stays.
+    shopify_oauth_enabled: bool = True
+
+    # Phase 9 — when set, FastAPI mounts the SPA dist as static files. None
+    # in dev (Vite serves the SPA); set to /app/static in the prod image.
+    frontend_dist_path: str | None = None
 
 
 @lru_cache

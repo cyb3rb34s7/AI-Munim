@@ -16,6 +16,7 @@ dependencies = [
     "cryptography>=44.0",
     "python-dotenv>=1.0",
     "tzdata>=2024.2",
+    "itsdangerous>=2.2",
 ]
 
 [dependency-groups]

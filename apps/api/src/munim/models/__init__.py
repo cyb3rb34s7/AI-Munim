@@ -8,10 +8,12 @@ from munim.models.connector_credentials import ConnectorCredentials
 from munim.models.merchant import Merchant
 from munim.models.record import Record
 from munim.models.run_log import RunLog
+from munim.models.user import User
 
 __all__ = [
     "ConnectorCredentials",
     "Merchant",
     "Record",
     "RunLog",
+    "User",
 ]
