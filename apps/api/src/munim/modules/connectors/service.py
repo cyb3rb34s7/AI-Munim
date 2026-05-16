@@ -66,6 +66,12 @@ class ConnectorSyncError(MunimError):
     message = "Sync failed."
 
 
+class FeatureDisabledError(MunimError):
+    code = ErrorCode.FEATURE_DISABLED.value
+    http_status = 403
+    message = "This feature is disabled in the current environment."
+
+
 class LegacyConnectRejectedError(MunimError):
     code = ErrorCode.CONNECTOR_NOT_DEMO.value
     http_status = 400
@@ -153,6 +159,11 @@ def start_oauth(merchant_id: str, name: ConnectorName, shop: str) -> StartOAuthR
         raise NotImplementedError(
             f"Real OAuth for connector {name.value!r} is not implemented yet."
         )
+    if not get_settings().shopify_oauth_enabled:
+        raise FeatureDisabledError(
+            message="Shopify OAuth is disabled in this environment.",
+            details={"feature": "shopify_oauth"},
+        )
     authorize_url = build_shopify_authorize_url(merchant_id=merchant_id, shop=shop)
     return StartOAuthResponse(authorize_url=authorize_url)
 
@@ -169,6 +180,11 @@ async def complete_oauth(
     registry: ConnectorRegistry,
 ) -> OAuthCompleteResult:
     settings = get_settings()
+    if not settings.shopify_oauth_enabled:
+        raise FeatureDisabledError(
+            message="Shopify OAuth is disabled in this environment.",
+            details={"feature": "shopify_oauth"},
+        )
 
     # 1. HMAC verify Shopify's callback signature (proves Shopify sent this).
     verify_shopify_callback_hmac(callback_params, settings.shopify_client_secret)

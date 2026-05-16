@@ -31,6 +31,7 @@ class ErrorCode(StrEnum):
     AGENT_RUN_FAILED = "agent.run_failed"
     AGENT_RUN_NOT_FOUND = "agent.run_not_found"
     AUTH_UNAUTHENTICATED = "auth.unauthenticated"
+    FEATURE_DISABLED = "feature.disabled"
 
 
 class EntityType(StrEnum):

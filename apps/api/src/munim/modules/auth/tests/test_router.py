@@ -90,6 +90,22 @@ def test_tampered_cookie_value_returns_unauthenticated() -> None:
         assert response.status_code == 401
 
 
+def test_cookie_issued_by_one_client_grants_identity_when_replayed_by_another() -> None:
+    """The cookie IS the bearer of identity (until per-session IP/UA binding
+    lands). This positive test pairs with the tampered-signature test: together
+    they prove HMAC verification is the gate, not just presence-of-cookie.
+    """
+    with _build_client() as alpha, _build_client() as beta:
+        alpha_body = alpha.post("/api/auth/start", json={"display_name": "Alpha"}).json()
+        alpha_cookie = alpha.cookies.get("munim_session")
+        assert alpha_cookie is not None
+
+        beta.cookies.set("munim_session", alpha_cookie)
+        me = beta.get("/api/auth/me")
+        assert me.status_code == 200
+        assert me.json()["data"]["merchant_id"] == alpha_body["data"]["merchant_id"]
+
+
 def test_two_distinct_starts_produce_distinct_merchants() -> None:
     # Two independent TestClients = two independent cookie jars =
     # two independent merchants. This is the load-bearing isolation

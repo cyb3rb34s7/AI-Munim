@@ -12,6 +12,7 @@ from munim.connectors.registry import default_registry
 from munim.models import ConnectorCredentials
 from munim.modules.connectors.service import (
     CredentialUnreadableError,
+    FeatureDisabledError,
     complete_oauth,
     start_oauth,
     sync_connector,
@@ -24,6 +25,42 @@ from munim.shared.crypto import decrypt_blob, sign_state
 def test_start_oauth_returns_authorize_url_for_shopify(session: Session) -> None:
     resp = start_oauth("m_default", ConnectorName.SHOPIFY, "munim-dev.myshopify.com")
     assert resp.authorize_url.startswith("https://munim-dev.myshopify.com/admin/oauth/authorize?")
+
+
+def test_start_oauth_rejects_when_shopify_oauth_disabled(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SHOPIFY_OAUTH_ENABLED", "false")
+    get_settings.cache_clear()
+    try:
+        with pytest.raises(FeatureDisabledError) as exc_info:
+            start_oauth("m_default", ConnectorName.SHOPIFY, "munim-dev.myshopify.com")
+        assert exc_info.value.code == "feature.disabled"
+        assert exc_info.value.http_status == 403
+    finally:
+        get_settings.cache_clear()
+
+
+async def test_complete_oauth_rejects_when_shopify_oauth_disabled(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SHOPIFY_OAUTH_ENABLED", "false")
+    get_settings.cache_clear()
+    try:
+        with pytest.raises(FeatureDisabledError) as exc_info:
+            await complete_oauth(
+                session,
+                "m_default",
+                ConnectorName.SHOPIFY,
+                code="abc",
+                state="anything",
+                shop="munim-dev.myshopify.com",
+                callback_params={"code": "abc"},
+                registry=default_registry(),
+            )
+        assert exc_info.value.code == "feature.disabled"
+    finally:
+        get_settings.cache_clear()
 
 
 @respx.mock

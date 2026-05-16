@@ -4,7 +4,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free
-    autoDeploy: true
+    autoDeploy: false
     healthCheckPath: /api/health
     disk:
       name: data
@@ -38,3 +38,8 @@ services:
         value: http://localhost/no-oauth
       - key: SHOPIFY_DEFAULT_SHOP_DOMAIN
         value: example.myshopify.com
+      # Self-referential; set this to the Render service URL after first deploy
+      # (e.g. https://munim.onrender.com). Used only for the post-OAuth redirect,
+      # which is currently gated off by SHOPIFY_OAUTH_ENABLED=false.
+      - key: FRONTEND_BASE_URL
+        sync: false
