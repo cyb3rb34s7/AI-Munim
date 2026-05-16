@@ -1,0 +1,35 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+
+import { fetchCurrentUser, logout, startDemo, type StartDemoInput } from '../api/client';
+
+export const AUTH_QUERY_KEY = ['auth', 'me'] as const;
+
+export function useCurrentUser() {
+  return useQuery({
+    queryKey: AUTH_QUERY_KEY,
+    queryFn: fetchCurrentUser,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
+export function useStartDemo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: StartDemoInput) => startDemo(input),
+    onSuccess: (user) => {
+      queryClient.setQueryData(AUTH_QUERY_KEY, user);
+    },
+  });
+}
+
+export function useLogout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: logout,
+    onSuccess: () => {
+      queryClient.setQueryData(AUTH_QUERY_KEY, null);
+      queryClient.removeQueries();
+    },
+  });
+}

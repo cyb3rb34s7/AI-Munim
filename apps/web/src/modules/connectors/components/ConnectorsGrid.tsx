@@ -1,4 +1,4 @@
-import { Loader } from '@/shared/components';
+import { EmptyState, Loader } from '@/shared/components';
 
 import { ConnectorCard } from './ConnectorCard';
 import type { ConnectorName, ConnectorView } from '../types/connector.types';
@@ -31,7 +31,14 @@ export function ConnectorsGrid({
       </div>
     );
   }
-  if (!connectors || connectors.length === 0) return null;
+  if (!connectors || connectors.length === 0) {
+    return (
+      <EmptyState
+        title="No connectors registered."
+        hint="This is unexpected — the backend should always advertise the three demo connectors."
+      />
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

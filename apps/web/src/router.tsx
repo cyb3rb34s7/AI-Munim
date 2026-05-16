@@ -4,20 +4,29 @@ import { ConnectorsPage } from '@/modules/connectors';
 import { RecordsPage } from '@/modules/records';
 import { ChatPage } from '@/modules/chat/ChatPage';
 import { AgentRunsPage } from '@/modules/agent_runs/AgentRunsPage';
+import { LandingPage } from '@/pages/LandingPage';
+import { StartPage } from '@/pages/StartPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
+import { ProtectedRoute } from '@/modules/auth';
 import { AppShell } from '@/shared/layout/AppShell';
 
 export const router = createBrowserRouter([
+  { path: '/', element: <LandingPage /> },
+  { path: '/start', element: <StartPage /> },
   {
     path: '/',
-    element: <AppShell />,
+    element: (
+      <ProtectedRoute>
+        <AppShell />
+      </ProtectedRoute>
+    ),
     children: [
-      { index: true, element: <Navigate to="/chat" replace /> },
       { path: 'chat', element: <ChatPage /> },
       { path: 'agents', element: <AgentRunsPage /> },
       { path: 'connectors', element: <ConnectorsPage /> },
       { path: 'records', element: <RecordsPage /> },
-      { path: '*', element: <NotFoundPage /> },
     ],
   },
+  { path: '*', element: <NotFoundPage /> },
+  { path: '/index', element: <Navigate to="/" replace /> },
 ]);

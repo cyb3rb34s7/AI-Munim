@@ -69,7 +69,8 @@ def test_logout_clears_session_then_me_returns_401() -> None:
     with _build_client() as client:
         client.post("/auth/start", json={}).raise_for_status()
         logout_response = client.post("/auth/logout")
-        assert logout_response.status_code == 204
+        assert logout_response.status_code == 200
+        assert logout_response.json()["data"] == {"logged_out": True}
         me_response = client.get("/auth/me")
         assert me_response.status_code == 401
 
@@ -79,8 +80,12 @@ def test_tampered_cookie_value_returns_unauthenticated() -> None:
         client.post("/auth/start", json={}).raise_for_status()
         original = client.cookies.get("munim_session")
         assert original is not None
-        flipped = "A" if original[-1] != "A" else "B"
-        client.cookies.set("munim_session", original[:-1] + flipped)
+        if "." in original:
+            body, _sig = original.rsplit(".", 1)
+            tampered = f"{body}.000000000000000000000000000"
+        else:
+            tampered = "garbagecookiebody"
+        client.cookies.set("munim_session", tampered)
         response = client.get("/auth/me")
         assert response.status_code == 401
 

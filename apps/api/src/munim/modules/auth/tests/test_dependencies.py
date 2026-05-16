@@ -70,9 +70,15 @@ def test_tampered_cookie_falls_through_to_unauthenticated(app_client: TestClient
     app_client.post("/_set_session?merchant_id=m_real&user_id=u_real").raise_for_status()
     original = app_client.cookies.get("munim_session")
     assert original is not None
-    # Flip a character mid-signature so the HMAC fails.
-    flipped_char = "A" if original[-1] != "A" else "B"
-    tampered = original[:-1] + flipped_char
+    # Replace the entire signature half (everything after the leading '.') with
+    # garbage that cannot validate against the HMAC. Single-char flips
+    # sometimes land on a base64 char that happens to validate; this is
+    # deterministic.
+    if "." in original:
+        body, _sig = original.rsplit(".", 1)
+        tampered = f"{body}.000000000000000000000000000"
+    else:
+        tampered = "garbagecookiebody"
     app_client.cookies.set("munim_session", tampered)
 
     response = app_client.get("/_whoami")

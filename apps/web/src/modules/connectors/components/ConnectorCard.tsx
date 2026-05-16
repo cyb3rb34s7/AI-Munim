@@ -23,6 +23,8 @@ const LABELS: Record<ConnectorName, string> = {
   shiprocket: 'Shiprocket',
 };
 
+const SHOPIFY_OAUTH_ENABLED = import.meta.env.VITE_SHOPIFY_OAUTH_ENABLED === 'true';
+
 export function ConnectorCard({
   view,
   syncing,
@@ -69,7 +71,7 @@ export function ConnectorCard({
         </dl>
         <div className="flex flex-wrap gap-2">
           {!isConnected && view.is_demo && <EnableDemoButton connectorName={view.name} />}
-          {!isConnected && !view.is_demo && (
+          {!isConnected && !view.is_demo && SHOPIFY_OAUTH_ENABLED && (
             <Button
               variant="primary"
               onClick={() => onConnectReal(view.name)}

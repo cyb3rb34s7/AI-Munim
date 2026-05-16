@@ -30,6 +30,7 @@ const base: KyInstance = ky.create({
   prefixUrl: API_PREFIX,
   timeout: 30_000,
   retry: { limit: 1, methods: ['get'] },
+  credentials: 'include',
 });
 
 export interface ApiResponse<T> {

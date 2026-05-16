@@ -18,10 +18,6 @@ export function fetchConnectors(): Promise<ApiResponse<ConnectorListResponse>> {
   return apiGet('/connectors', connectorListResponseSchema);
 }
 
-export function postConnect(name: ConnectorName): Promise<ApiResponse<ConnectResponse>> {
-  return apiPost(`/connectors/${name}/connect`, connectResponseSchema);
-}
-
 export function postConnectDemo(name: ConnectorName): Promise<ApiResponse<ConnectResponse>> {
   return apiPost(`/connectors/${name}/connect-demo`, connectResponseSchema);
 }

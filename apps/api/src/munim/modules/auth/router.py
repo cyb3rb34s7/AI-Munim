@@ -6,7 +6,7 @@ sets the cookie on the response. Clearing the cookie is `request.session.clear()
 which the middleware translates into a delete-cookie response header.
 """
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Request
 from sqlmodel import Session
 
 from munim.models import User
@@ -50,7 +50,7 @@ def me_endpoint(
     return SuccessEnvelope(data=current, trace_id=request.state.trace_id)
 
 
-@router.post("/logout", status_code=204)
-def logout_endpoint(request: Request) -> Response:
+@router.post("/logout", response_model=SuccessEnvelope[dict[str, bool]])
+def logout_endpoint(request: Request) -> SuccessEnvelope[dict[str, bool]]:
     request.session.clear()
-    return Response(status_code=204)
+    return SuccessEnvelope(data={"logged_out": True}, trace_id=request.state.trace_id)
