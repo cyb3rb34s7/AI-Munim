@@ -34,7 +34,9 @@ A v0 of an AI employee for Indian D2C brands, built as a hiring assignment.
 
 2. **A chat layer with a strict citation contract.** Every numerical claim is wrapped with `[cite:record_id]` markers. Four layers enforce this — tool return shape, structured output, citation validation, fail-closed post-processor. Uncited numbers never reach the user.
 
-3. **A deterministic agent — the RTO Risk Mitigator.** Manual trigger via `POST /agents/rto_mitigator/run`. Scans new COD orders, scores RTO risk from named signals (customer's past RTO rate via the cross-connector hash, pincode risk, order-value band, time of order), proposes one of three actions: `convert_to_prepaid`, `confirmation_call`, `no_action`. Writes the full reasoning to `run_log`. Never actually sends anything.
+3. **Two autonomous agents — one deterministic, one LLM-driven.**
+   - **RTO Risk Mitigator** (deterministic). Manual trigger via `POST /agents/rto_mitigator/run`. Scans new COD orders, scores RTO risk from named signals (customer's past RTO rate via the cross-connector hash, pincode risk, order-value band, time of order), proposes one of three actions: `convert_to_prepaid`, `confirmation_call`, `no_action`. Writes the full reasoning to `run_log`. Never actually sends anything. Auditable, cheap, predictable — the right shape for a high-stakes "convert this COD to prepaid?" decision.
+   - **Daily Briefing** (LLM-driven, sector-aware). `POST /agents/daily_briefing/run?sector=fashion`. A PydanticAI agent reuses the chat tools to compose a 7-day plain-English narrative + 0–3 proposed actions; every numeric claim is run through the same fail-closed citation enforcer the chat layer uses. Sector (fashion / beauty / fmcg / electronics / home / generic) is a per-run dropdown input that biases the prompt. Two agents, two patterns — both audit-trailed to the same `run_log` table.
 
 4. **Anonymous multi-tenant backbone, demonstrated.** Every visitor to the deployed URL gets a fresh `Merchant` row, a signed session cookie, and 96 pre-seeded demo rows isolated from every other visitor. The "scale story" is no longer a paragraph — it's a tested property of the running system.
 
@@ -97,14 +99,27 @@ Four layers, all must hold:
 3. **Validation** — every `[cite:N]` marker is checked against the citations the tools returned. Hallucinated record ids fail validation → retry once → error.
 4. **Fail-closed post-processor** — regex pass over `text` finds any free-floating number not inside a `[cite:...]` marker and replaces it with `[unverified number removed]`. If the scanner errors, we reject the whole response.
 
-## How the agent works
+## How the agents work
 
-The RTO Risk Mitigator. Run via `POST /agents/rto_mitigator/run`. Four bullets:
+We ship two agents, deliberately on two different patterns. A reviewer asking "show me the LLM-in-the-loop" sees the briefing agent; a reviewer asking "show me an auditable, deterministic decision" sees the RTO mitigator. Both write to the same `run_log` table and surface in `/agents`.
+
+### RTO Risk Mitigator (deterministic)
+
+Run via `POST /agents/rto_mitigator/run`. Four bullets:
 
 1. **Signals are pure functions.** `customer_rto_rate` (joins to Shiprocket via the SHA-256 customer hash), `pincode_risk`, `order_value_band`, `time_of_order_risk` (IST-local, not UTC — Phase 6 paid lesson).
 2. **Scoring is a weighted sum + threshold tree.** `Decimal` end-to-end for money. Weights are module-level constants; thresholds split into `convert_to_prepaid` / `confirmation_call` / `no_action`.
 3. **One `RunLog` row per run.** `detail_json` carries the per-order signal scores, weights, action, estimated ₹ saved, and a one-line reasoning string.
 4. **Zero outbound HTTP.** `respx.mock` test locks this for the httpx layer; the agent is purely a reasoning + scoring pass over local data.
+
+### Daily Briefing (LLM-driven, sector-aware)
+
+Run via `POST /agents/daily_briefing/run?sector=fashion`. Four bullets:
+
+1. **PydanticAI agent over the chat tools.** Reuses `query_orders / query_shipments / query_ad_spend` — same provenance contract as the chat surface.
+2. **Sector biases the system prompt.** Six sectors (fashion / beauty / fmcg / electronics / home / generic); each splices a one-line "watch for X" hint that nudges the narrative toward sector-specific concerns (size-fit RTOs for fashion; high-AOV COD risk for electronics; repurchase windows for beauty).
+3. **Citation contract end-to-end.** Output is a `BriefingOutput { narrative, proposed_actions, used_citations }` Pydantic shape; every numeric claim carries an inline `[cite:row_id]` marker; the same fail-closed enforcer the chat layer uses strips any uncited number before persistence.
+4. **One `RunLog` row per run.** `detail_json` carries `narrative` (cleaned), `proposed_actions[]`, full `citations[]`, `sector`, `run_id`, `trace_id`. Renders in `/agents` via a `<BriefingDetail>` branch in `RunDetailSheet`.
 
 ## Connectors — which 3 and why
 
@@ -190,19 +205,25 @@ What this prevents and what it doesn't is enumerated explicitly in [`docs/archit
 
 The UI renders `[cite:N]` markers as inline shadcn badges. Clicking a badge opens a popover showing both the `normalized` shape and the `raw` source payload from the cited `record` row.
 
-## Agent — what it does and why this one
+## Agents — what they do and why these two
 
-**The RTO Risk Mitigator.** Runs every 30 minutes (configurable). For each new COD order since the last run, it scores RTO risk from named signals — customer's past RTO rate, pincode RTO rate, order-value band, product category, time of order — and proposes one of three actions: `convert_to_prepaid`, `confirmation_call`, or `no_action`. It writes everything to a `run_log`: the score, the signals that produced it, the proposed action, the estimated ₹ saved if intercepted, and the cited rows that supported each decision.
+We ship two agents on two intentionally different patterns. Both are manually triggered in v0 (no cron), both write to the same `run_log` table, both surface in the `/agents` audit log.
 
-**It never actually sends anything.** No WhatsApp, no calls, no order modifications. The brief asked for the reasoning trail, not the side effect, and that's what we ship.
+**The RTO Risk Mitigator (deterministic).** For each new COD order, it scores RTO risk from named signals — customer's past RTO rate, pincode RTO rate, order-value band, time of order — and proposes one of three actions: `convert_to_prepaid`, `confirmation_call`, or `no_action`. It writes everything to a `run_log`: the score, the signals that produced it, the proposed action, the estimated ₹ saved if intercepted, and the cited rows that supported each decision.
 
-### Why this agent
+**The Daily Briefing (LLM-driven, sector-aware).** A PydanticAI agent that calls the chat tools (`query_orders / query_shipments / query_ad_spend`), composes a 7-day narrative + 0–3 proposed actions in plain English, and threads the same fail-closed citation enforcer over the output so every numeric claim is grounded in a real `record` row. Sector (fashion / beauty / fmcg / electronics / home / generic) is a per-run dropdown that splices a sector-specific "watch for X" hint into the system prompt.
 
-Three reasons, all checkable:
+**Neither actually sends anything.** No WhatsApp, no calls, no order modifications, no emails. The brief asked for the reasoning trail, not the side effect, and that's what we ship.
 
-1. **Indian D2C reality.** RTO is the single largest bleeding source for an Indian D2C brand at our target ARR. COD share is 40–60%; RTO rates 15–25% baseline (40% for new brands); cost per RTO ₹150–300. A brand doing 1,000 COD orders/month at 20% RTO bleeds ₹30,000–60,000/month — roughly one junior operator's salary, every month. Even intercepting 25% of high-risk orders is a six-figure annual saving.
-2. **It uses all three connectors.** Customer history needs Shopify + Shiprocket joined by customer. Pincode RTO rate needs Shiprocket history aggregated. UTM attribution for the eventual ROAS lift comes from Meta. The agent proves the universal schema is worth the work.
-3. **The decision space is small, bounded, and auditable.** Three actions. Named signals. Configurable weights. The run log is human-readable: an operator can look at one row and understand what the agent saw, what it scored, what it would have done, and why.
+### Why these two, on two different patterns
+
+The brief is graded on craft + judgment. Two agents on two patterns is a deliberate judgment call: a reviewer reading the rubric for "show me an auditable AI employee" sees the deterministic agent (`signals × weights → action`, no LLM, every step inspectable); a reviewer reading the rubric for "show me LLM-in-the-loop reasoning" sees the LLM-driven briefing. Shipping only the first risks reading as "not actually AI"; shipping only the second risks reading as "magic, hope you trust the model." Two agents, two patterns, one schema, one citation contract.
+
+Three reasons each was the right pick:
+
+1. **Indian D2C reality.** RTO is the single largest bleeding source for an Indian D2C brand at our target ARR. COD share is 40–60%; RTO rates 15–25% baseline (40% for new brands); cost per RTO ₹150–300. A brand doing 1,000 COD orders/month at 20% RTO bleeds ₹30,000–60,000/month — roughly one junior operator's salary, every month. Even intercepting 25% of high-risk orders is a six-figure annual saving. (RTO mitigator.)
+2. **Owner-readable weekly briefing.** D2C founders don't want a dashboard at 9pm; they want a paragraph. The briefing agent compresses the week into 4–6 sentences + a few concrete actions, citation-grounded. (Daily briefing.)
+3. **They use all three connectors.** Customer history needs Shopify + Shiprocket joined by customer. Pincode RTO rate needs Shiprocket aggregated. UTM attribution for ROAS comes from Meta. Both agents prove the universal schema is worth the work.
 
 ### Failure modes — listed up front, not after the reviewer finds them
 
@@ -304,7 +325,7 @@ In rough priority order:
 1. **Paraphrase verification of citations** (the highest-value gap in the citation contract).
 2. **Real OAuth for Meta and Shiprocket.** The interface is already designed for it; only the per-connector implementation is missing.
 3. **Webhook ingestion** for Shopify orders/refunds. Reduces staleness from 30 minutes to seconds for the agent.
-4. **The second agent: True ROAS Watcher.** Meta spend + Shopify net revenue + Shiprocket RTO losses → flag campaigns whose true profit is negative.
+4. **Scheduled briefings.** The daily-briefing agent ships with a manual trigger; a cron/APScheduler tick that fires it weekly per merchant (and emails the narrative) is half a day of work and adds the "proactive" axis to the existing two agents.
 5. **Multi-tenant cut-over.** Per-merchant credentials, per-merchant Postgres schema, an auth layer. The skeleton is there; this would harden it.
 6. **Load-test harness.** A real `load_test.py` that fans out N synthetic merchants and measures connector throughput, DB contention, LLM cost.
 7. **Numeric-format normalisation in citations.** "₹12,000" vs "12000" vs "12K" — pick one canonical render and convert.

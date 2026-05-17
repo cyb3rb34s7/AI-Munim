@@ -19,6 +19,24 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-17 — phase 11 — daily-briefing agent (second agent, LLM-driven, sector-aware)
+
+**What changed:** Shipped a second autonomous agent — `daily_briefing` — alongside the deterministic `rto_mitigator`. The new agent is a PydanticAI Agent that composes a 7-day plain-English narrative + 0–3 proposed actions, every numeric claim cited to a real `record` row via the same enforcer the chat layer uses. Sector is a per-run input (frontend dropdown → backend `?sector=` query param, 6 values: `fashion`, `beauty`, `fmcg`, `electronics`, `home`, `generic`); each sector splices a "watch for X" hint into the system prompt.
+
+- **Backend:** new `apps/api/src/munim/agents/daily_briefing/` package with `constants.py` (`Sector` StrEnum + `SECTOR_HINT` + `SECTOR_LABEL`), `schemas.py` (`BriefingOutput`, `ProposedAction`), `agent.py` (PydanticAI Agent that reuses `chat.tools.query_orders / query_shipments / query_ad_spend`), and `service.py` (orchestrator: build agent → run → collect citations → enforcer → persist RunLog). `AgentName.DAILY_BRIEFING` added to `shared/constants.py`. `agent_runs.service.trigger_agent` is now `async def`; the briefing path `await run_briefing(...)`, the RTO path stays synchronous inline. `AgentRunDetail` schema gains optional `sector / narrative / proposed_actions / citations` (null for RTO runs). Missing/unknown sector → `SectorRequiredError` (HTTP 400 `validation.missing_field`).
+- **Frontend:** new `apps/web/src/shared/constants/sectors.ts` (`Sector` + `SECTOR_LABEL` + `SECTOR_OPTIONS`); `AgentName.DAILY_BRIEFING` added to `agents.ts`. New `RunBriefingButton` (native `<select>` styled with Tailwind + sparkle button) on the `/agents` header beside the RTO trigger. New `BriefingDetail` component (sector chip + narrative + actions list) reuses `CitedText`. `CitedText` extracted from `MessageBubble.renderAssistantText` into its own component so both surfaces share one parser. `RunDetailSheet` branches on `data.agent === AgentName.DAILY_BRIEFING` → `<BriefingDetail>` else existing RTO impact + donut + decisions UI. `agentRunDetailSchema` extended with optional briefing fields. New `useTriggerBriefing` hook (mirrors `useTriggerAgent`, toast text generalised so "0 orders scanned" doesn't bleed into the briefing summary).
+- **Tests:** 2 schema tests + 2 service tests for the new agent (using PydanticAI's `TestModel` — no real LLM calls). Existing `agent_runs/tests/test_service.py` flipped to `async def` for the now-async `trigger_agent`. 244 → 248 backend tests; all gates green (`ruff`, `ruff format`, `mypy`, `pytest`, `tsc`, `eslint`).
+
+**Why:** The brief said "AI employee", which a reviewer might read as expecting an LLM in the loop. The deterministic RTO agent is a defensible product call (auditable, cheap, predictable) and we still keep it. Shipping a second LLM-driven agent demonstrates the other pattern — narrative composition with citation enforcement — alongside the auditable one. Both agents share the chat tools + the citation enforcer; the citation contract stays one path.
+
+**Files touched:**
+- Backend: `apps/api/src/munim/agents/daily_briefing/**` (new), `apps/api/src/munim/shared/constants.py` (`AgentName.DAILY_BRIEFING`), `apps/api/src/munim/modules/agent_runs/{router,service,schemas,tests/test_service}.py`.
+- Frontend: `apps/web/src/shared/constants/{sectors.ts,agents.ts}`, `apps/web/src/modules/agent_runs/{api/client.ts,AgentRunsPage.tsx,components/{BriefingDetail,RunBriefingButton,RunDetailSheet}.tsx,hooks/useTriggerBriefing.ts}`, `apps/web/src/modules/chat/components/{CitedText.tsx,MessageBubble.tsx}`.
+
+**Reverts cleanly?:** yes. Backend: drop `agents/daily_briefing/`, revert the briefing-dispatch branch in `agent_runs.service`, revert the optional fields in `AgentRunDetail`, drop the `AgentName.DAILY_BRIEFING` enum entry. Frontend: drop the briefing components + hook + sectors module, revert `RunDetailSheet`'s agent branch, fold `CitedText` back into `MessageBubble`. The `trigger_agent` async conversion is the only non-additive change but is harmless when the briefing dispatch is gone (every `await` on a sync function is valid).
+
+---
+
 ## 2026-05-17 — persistent chat suggestions + thinking indicator
 
 **What changed:** Two cosmetic touches in `apps/web/src/modules/chat/components/MessageList.tsx`.

@@ -8,7 +8,17 @@
 
 ## Now
 
-Final-polish pass before deploy (2026-05-17). Tasks 1–4 done; ready for manual smoke + deploy.
+Phase 11 complete (2026-05-17, deadline day). Second agent shipped: `daily_briefing`, LLM-driven, sector-aware. The deterministic `rto_mitigator` stays for the auditable/cheap pattern; the briefing agent demonstrates the LLM-driven pattern alongside it — both share the same chat tools + the same fail-closed citation enforcer.
+
+Architecture: PydanticAI agent in `apps/api/src/munim/agents/daily_briefing/`. Sector is per-run (frontend dropdown → `?sector=` query param), 6 values (`fashion`, `beauty`, `fmcg`, `electronics`, `home`, `generic`), each splices a one-line "watch for X" hint into the system prompt. Agent's structured output is `BriefingOutput { narrative, proposed_actions[], used_citations }`. The service walks `run_result.all_messages()`, collects citations from every `ToolReturnPart` whose content is a `ToolResult`, runs `enforce_grounded_answer` over the narrative AND each action's reasoning, and persists one `RunLog` row with `detail_json` carrying narrative + actions + citations + sector + run_id + trace_id.
+
+Trigger endpoint unchanged: `POST /api/agents/{name}/run`. For `daily_briefing` the `?sector=...` query param is required; missing/unknown sector returns 400 `validation.missing_field` via new `SectorRequiredError`. `trigger_agent` became `async def` so the briefing's `await run_briefing(...)` is clean; the RTO path's synchronous `.run(...)` is valid inside the async function. Existing agent_runs service tests updated to `async def test_…` with `await trigger_agent(...)`.
+
+Frontend: new sector dropdown + "Run daily briefing" button beside the RTO trigger button on `/agents`. `RunDetailSheet` branches on `data.agent === AgentName.DAILY_BRIEFING` → `<BriefingDetail>` (sector chip + narrative with cited claims + proposed-actions list); RTO path unchanged. `CitedText` extracted from `MessageBubble`'s `renderAssistantText` into a standalone component reused by both `MessageBubble` and `BriefingDetail`; the citation parser regex + UNVERIFIED_SENTINEL handling now live in one place. `AgentRunDetail` Zod schema extended with optional `sector / narrative / proposed_actions / citations` — backward-compatible with RTO runs (those fields are null/None for `rto_mitigator`).
+
+Lesson reinforced (not new): any new agent reuses `chat.tools` so the citation contract stays one path. Both agents now write to the same `run_log` table with the same envelope-friendly shape; the only divergence is the briefing's `decisions: []` (empty) vs. the RTO's full per-order decision list — `RunDetailSheet` branches on `agent` to choose which renderer to use.
+
+Test count: 248 backend tests pass (`uv run pytest`); `pnpm tsc --noEmit && pnpm lint` green. All eight tasks committed; no `--no-verify`, no broad `except Exception`, no magic strings in branches (sector + agent name go through enums on both sides).
 
 Task 4 (chat polish): Suggestion chips persist below the message list after first interaction (smaller pill style + "Try also:" label, horizontally scrollable). Thinking indicator augmented with a 1.5s-cycling phrase line under the bouncing dots: "Looking up your data…" → "Cross-referencing shipment history…" → "Composing answer…". Cosmetic only — no streaming integration, deliberately out of scope. AnimatePresence with mode="wait" handles the fade between phrases.
 
