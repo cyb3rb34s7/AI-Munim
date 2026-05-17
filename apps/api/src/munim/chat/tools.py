@@ -25,6 +25,7 @@ from munim.models import Record, RunLog
 from munim.shared.constants import (
     EntityType,
     ErrorCode,
+    FulfillmentStatus,
     MetricFormula,
     PaymentMethod,
     RunLogKind,
@@ -126,6 +127,119 @@ def query_orders(
             "utm_campaign": utm_campaign,
             "financial_status": financial_status,
         },
+    )
+    return ToolResult(data=data, citations=citations)
+
+
+def query_shipments(
+    ctx: ChatContext,
+    *,
+    customer_source_id: str | None = None,
+    fulfillment_status: FulfillmentStatus | None = None,
+    pincode: str | None = None,
+) -> ToolResult[list[dict[str, Any]]]:
+    """Filter Shiprocket shipments. The most useful filter is
+    `customer_source_id` — look up a customer's prior shipment outcomes
+    (delivered vs RTO) before recommending action on their pending orders.
+    """
+    stmt = (
+        select(Record)
+        .where(Record.merchant_id == ctx.merchant_id)
+        .where(Record.source_system == SourceSystem.SHIPROCKET.value)
+        .where(Record.entity_type == EntityType.SHIPMENT.value)
+        .order_by(col(Record.fetched_at).desc())
+    )
+    rows = ctx.session.exec(stmt).all()
+
+    def matches(row: Record) -> bool:
+        n = row.normalized
+        if customer_source_id is not None and n.get("customer_source_id") != customer_source_id:
+            return False
+        if (
+            fulfillment_status is not None
+            and n.get("fulfillment_status") != fulfillment_status.value
+        ):
+            return False
+        if pincode is not None and n.get("pincode") != pincode:
+            return False
+        return True
+
+    matched = [r for r in rows if matches(r)]
+    data = [dict(r.normalized) for r in matched]
+    citations = [
+        _row_to_citation(
+            r,
+            fields=[
+                "fulfillment_status",
+                "courier_name",
+                "total_inr",
+                "placed_at",
+                "pincode",
+                "customer_source_id",
+            ],
+        )
+        for r in matched
+    ]
+    log.info(
+        "chat.tool.invoked",
+        tool="query_shipments",
+        merchant_id=ctx.merchant_id,
+        row_count=len(matched),
+        filters={
+            "customer_source_id": customer_source_id,
+            "fulfillment_status": fulfillment_status.value if fulfillment_status else None,
+            "pincode": pincode,
+        },
+    )
+    return ToolResult(data=data, citations=citations)
+
+
+def query_ad_spend(
+    ctx: ChatContext,
+    *,
+    campaign_name: str | None = None,
+) -> ToolResult[list[dict[str, Any]]]:
+    """Filter Meta Ads campaign-day rows. Use when the user asks about
+    marketing spend, campaign performance, ROAS, or CTR.
+    """
+    stmt = (
+        select(Record)
+        .where(Record.merchant_id == ctx.merchant_id)
+        .where(Record.source_system == SourceSystem.META_ADS.value)
+        .where(Record.entity_type == EntityType.AD_SPEND.value)
+        .order_by(col(Record.fetched_at).desc())
+    )
+    rows = ctx.session.exec(stmt).all()
+
+    def matches(row: Record) -> bool:
+        n = row.normalized
+        if campaign_name is not None and n.get("campaign_name") != campaign_name:
+            return False
+        return True
+
+    matched = [r for r in rows if matches(r)]
+    data = [dict(r.normalized) for r in matched]
+    citations = [
+        _row_to_citation(
+            r,
+            fields=[
+                "campaign_name",
+                "date",
+                "spend_inr",
+                "impressions",
+                "clicks",
+                "ctr",
+                "purchases_attributed",
+            ],
+        )
+        for r in matched
+    ]
+    log.info(
+        "chat.tool.invoked",
+        tool="query_ad_spend",
+        merchant_id=ctx.merchant_id,
+        row_count=len(matched),
+        filters={"campaign_name": campaign_name},
     )
     return ToolResult(data=data, citations=citations)
 

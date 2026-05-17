@@ -13,8 +13,28 @@ const ENTITY_LABEL: Record<string, string> = {
   ad_spend: 'Ad spend',
 };
 
+const SOURCE_LABEL: Record<string, string> = {
+  shopify: 'Shopify',
+  shiprocket: 'Shiprocket',
+  meta_ads: 'Meta Ads',
+};
+
+const SOURCE_DOT: Record<string, string> = {
+  shopify: 'bg-primary',
+  shiprocket: 'bg-success',
+  meta_ads: 'bg-warning',
+};
+
 function entityLabel(type: string): string {
   return ENTITY_LABEL[type] ?? type;
+}
+
+function sourceLabel(source: string): string {
+  return SOURCE_LABEL[source] ?? source;
+}
+
+function sourceDot(source: string): string {
+  return SOURCE_DOT[source] ?? 'bg-fg-subtle';
 }
 
 function asString(value: unknown): string | null {
@@ -71,8 +91,6 @@ function factsFor(type: string, excerpt: Record<string, unknown>): string[] {
   if (type === 'shipment') {
     const status = asString(excerpt.fulfillment_status);
     if (status) facts.push(FULFILLMENT_LABEL[status] ?? status);
-    const courier = asString(excerpt.courier_name);
-    if (courier) facts.push(courier);
     const date = shortDate(excerpt.placed_at);
     if (date) facts.push(date);
     return facts;
@@ -113,6 +131,15 @@ export function CitationBadge({ citations, children }: Props) {
               const facts = factsFor(c.entity_type, c.excerpt ?? {});
               return (
                 <div key={c.record_id} className="flex flex-col gap-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      aria-hidden
+                      className={`inline-block h-1.5 w-1.5 rounded-full ${sourceDot(c.source_system)}`}
+                    />
+                    <span className="text-fg-subtle text-[10px] uppercase tracking-wide">
+                      {sourceLabel(c.source_system)}
+                    </span>
+                  </div>
                   <div className="flex items-baseline gap-2">
                     <span className="text-fg font-medium">{entityLabel(c.entity_type)}</span>
                     <span className="font-mono text-fg-muted text-[10px]">{c.source_id}</span>

@@ -8,9 +8,9 @@ import { MessageBubble } from './MessageBubble';
 
 const SUGGESTIONS = [
   'How many orders are paid online?',
-  'What is my average order value this week?',
-  'Show me the highest-RTO-risk pincodes',
-  'Which orders look like RTO risks?',
+  'Compare my Meta ad spend to my Shopify revenue',
+  'Which customer has the worst RTO history, and what are they pending?',
+  'Which Meta campaign drives the most purchases?',
 ] as const;
 
 const THINKING_PHASES = [
@@ -78,10 +78,11 @@ function EmptyState({ onSuggest }: { onSuggest: (prompt: string) => void }) {
       </div>
       <div className="max-w-md">
         <h2 className="text-xl font-semibold tracking-tight text-fg">
-          Ask about your sales, orders, or RTO risk
+          Ask anything across Shopify, Meta Ads, and Shiprocket
         </h2>
         <p className="mt-1.5 text-sm text-fg-muted">
-          Every numeric claim is grounded in a real row. Hover any citation badge to see the source.
+          Every numeric claim is grounded in a real row from one of your connectors. Hover any
+          citation to see the source.
         </p>
       </div>
       <div className="flex flex-wrap gap-2 justify-center max-w-xl">
@@ -97,17 +98,11 @@ function EmptyState({ onSuggest }: { onSuggest: (prompt: string) => void }) {
 
 function PersistentSuggestions({ onSuggest }: { onSuggest: (prompt: string) => void }) {
   return (
-    <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-1">
-      <span className="shrink-0 text-xs text-fg-subtle">Try also:</span>
+    <div className="mt-4 flex flex-wrap gap-2">
       {SUGGESTIONS.map((s) => (
-        <button
-          key={s}
-          type="button"
-          onClick={() => onSuggest(s)}
-          className="shrink-0 rounded-full border border-border bg-surface-elevated px-3 py-1 text-xs text-fg-muted transition-colors hover:bg-surface-subtle hover:text-fg"
-        >
+        <Button key={s} variant="secondary" size="sm" onClick={() => onSuggest(s)}>
           {s}
-        </button>
+        </Button>
       ))}
     </div>
   );

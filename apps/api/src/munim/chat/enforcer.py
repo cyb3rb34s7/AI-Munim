@@ -7,8 +7,7 @@ Output: the answer's `text` with every numeric claim that's NOT inside a
 "covered range" (the window before a `[cite:row_id,...]` marker) replaced
 by `[unverified number removed]`. Raises `CitationEnforcerError` if the
 answer is structurally dishonest: malformed cite marker, hallucinated row
-id, used_citations referring to a row no tool returned, or text-cite that
-isn't in used_citations.
+id, or used_citations referring to a row no tool returned.
 
 Per docs/architecture.md §5.4: fail-closed by design. If we can't be
 certain a number is grounded, we strip it. If the answer is internally
@@ -121,11 +120,19 @@ def enforce_grounded_answer(
       (the model hallucinated it).
     - `used_citations` references a row id not in `available_citations`
       (the model claims it used a row that no tool returned).
-    - The text cites a row id not in `used_citations` (the model
-      contradicts itself between text and metadata).
 
     Replaces (rather than raises) when:
     - A numeric claim appears in the text without a nearby [cite:...] marker.
+
+    Tolerates (lenient by design):
+    - The model citing a row in text that it forgot to list in its self-
+      declared `used_citations` field. The real provenance check is that
+      every text-cite id IS in `available_citations` (above) — that's
+      enforced. The `used_citations` self-declaration is informational;
+      the frontend renders citations from the full tool-returned set, not
+      from `used_citations`. Failing the whole answer over an LLM
+      inconsistency between two redundant fields is engineer-grade
+      strictness with no user-grade benefit.
     """
     available_ids = {c.record_id for c in available_citations}
     used_set = set(answer.used_citations)
@@ -141,10 +148,8 @@ def enforce_grounded_answer(
             details={"hallucinated_in_used": sorted(hallucinated_in_used)},
         )
 
-    # --- 2. Validate every [cite:...] marker, collect text-cited ids,
-    #         build covered ranges. ---
+    # --- 2. Validate every [cite:...] marker, build covered ranges. ---
     covered_ranges: list[tuple[int, int]] = []
-    text_cite_ids: set[int] = set()
     for match in _CITE_MARKER.finditer(answer.text):
         ids_str = match.group("ids")
         try:
@@ -168,24 +173,10 @@ def enforce_grounded_answer(
                     ),
                     details={"row_id": cid, "available": sorted(available_ids)},
                 )
-            text_cite_ids.add(cid)
         start = max(0, match.start() - _PROXIMITY_CHARS)
         covered_ranges.append((start, match.end()))
 
-    # --- 3. Cross-check: every id in text cite markers must be in
-    #         used_citations. (Extras in used_citations are tolerated —
-    #         the model declared more than it used; harmless.) ---
-    text_minus_used = text_cite_ids - used_set
-    if text_minus_used:
-        raise CitationEnforcerError(
-            message=(
-                f"Text cites row(s) {sorted(text_minus_used)} that are not in "
-                "used_citations — the answer contradicts its own metadata."
-            ),
-            details={"in_text_not_in_used": sorted(text_minus_used)},
-        )
-
-    # --- 4. Scan for numeric claims; replace any outside covered ranges. ---
+    # --- 3. Scan for numeric claims; replace any outside covered ranges. ---
     out_parts: list[str] = []
     cursor = 0
     for claim in _CLAIM_PATTERN.finditer(answer.text):

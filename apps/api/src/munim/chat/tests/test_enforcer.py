@@ -94,19 +94,19 @@ def test_used_citations_extras_are_tolerated() -> None:
     assert out == "Revenue: ₹15,750[cite:1]."
 
 
-def test_text_cites_row_not_in_used_citations_raises() -> None:
-    # The strict direction: model cites [cite:2] in text but used_citations
-    # says it only used [1]. The answer contradicts its own metadata —
-    # fail closed. Phase 5 reviewer caught this gap; the original test had
-    # the same name but actually asserted the lenient case, which is why
-    # the cross-check went untested.
+def test_text_cite_missing_from_used_citations_is_tolerated() -> None:
+    # The model cited row 2 in text but forgot to add it to its self-declared
+    # used_citations. Row 2 IS in available_citations (a tool actually returned
+    # it), so the real provenance check passes. used_citations is informational
+    # only — the frontend renders from the full tool-returned set. Failing the
+    # whole answer over this LLM-self-consistency mismatch is engineer-grade
+    # strictness with no user-grade benefit.
     answer = GroundedAnswer(
         text="Revenue: ₹15,750[cite:2].",
         used_citations=[1],
     )
-    with pytest.raises(CitationEnforcerError) as exc_info:
-        enforce_grounded_answer(answer, available_citations=[_cite(1), _cite(2)])
-    assert "used_citations" in str(exc_info.value.message).lower()
+    out = enforce_grounded_answer(answer, available_citations=[_cite(1), _cite(2)])
+    assert out == "Revenue: ₹15,750[cite:2]."
 
 
 def test_used_citations_referring_to_unavailable_row_raises() -> None:
