@@ -94,6 +94,7 @@ class FulfillmentStatus(StrEnum):
 
 class AgentName(StrEnum):
     RTO_MITIGATOR = "rto_mitigator"
+    DAILY_BRIEFING = "daily_briefing"
 
 
 class AgentActionType(StrEnum):
