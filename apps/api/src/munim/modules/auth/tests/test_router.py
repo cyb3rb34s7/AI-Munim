@@ -151,11 +151,15 @@ def test_onboard_is_idempotent_on_second_call() -> None:
         client.post("/api/auth/start", json={"display_name": "Repeat"}).raise_for_status()
         first = client.post("/api/auth/onboard").json()["data"]
         second = client.post("/api/auth/onboard").json()["data"]
-        assert first == second == {
-            "shopify_rows": 6,
-            "meta_ads_rows": 40,
-            "shiprocket_rows": 50,
-        }
+        assert (
+            first
+            == second
+            == {
+                "shopify_rows": 6,
+                "meta_ads_rows": 40,
+                "shiprocket_rows": 50,
+            }
+        )
 
 
 def test_onboard_without_session_returns_401() -> None:
