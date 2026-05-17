@@ -1,4 +1,5 @@
 import { Button, Card, StatusBadge } from '@/shared/components';
+import { fmtIST } from '@/shared/utils/fmtIST';
 
 import { EnableDemoButton } from './EnableDemoButton';
 import { ConnectorName, type ConnectorView, type CredentialStatus } from '../types/connector.types';
@@ -53,7 +54,9 @@ export function ConnectorCard({
       title={LABELS[view.name] ?? view.name}
       trailing={
         <div className="flex items-center gap-2">
-          {view.is_demo && <StatusBadge tone="muted">demo</StatusBadge>}
+          {view.is_demo && view.status === null && (
+            <StatusBadge tone="muted">demo</StatusBadge>
+          )}
           {view.status ? (
             <StatusBadge tone={STATUS_TONE[view.status]}>{view.status}</StatusBadge>
           ) : (
@@ -67,7 +70,7 @@ export function ConnectorCard({
           <dt className="text-fg-muted">{primaryLabel}</dt>
           <dd className="font-mono">{primaryCount}</dd>
           <dt className="text-fg-muted">Last sync</dt>
-          <dd className="font-mono">{view.last_sync_at ?? '—'}</dd>
+          <dd>{view.last_sync_at ? fmtIST(view.last_sync_at) : '—'}</dd>
         </dl>
         <div className="flex flex-wrap gap-2">
           {!isConnected && view.is_demo && <EnableDemoButton connectorName={view.name} />}

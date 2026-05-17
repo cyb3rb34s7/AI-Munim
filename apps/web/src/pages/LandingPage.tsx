@@ -25,7 +25,7 @@ const FEATURES = [
 export function LandingPage() {
   const { user, isLoading } = useAuthContext();
   if (isLoading) return null;
-  if (user !== null) return <Navigate to="/chat" replace />;
+  if (user !== null) return <Navigate to="/onboarding" replace />;
 
   return (
     <div className="min-h-screen bg-bg text-fg">

@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { Badge, Card, Skeleton } from '@/shared/ui';
 import { fadeUp, stagger } from '@/shared/utils/motion';
 import { ApiError } from '@/shared/api';
+import { agentDisplayName } from '@/shared/constants/agents';
 import type { AgentRunSummary } from '@/modules/agent_runs/api/client';
 
 interface Props {
@@ -89,7 +90,7 @@ export function RunsTable({ runs, isLoading, error, onOpenRun }: Props) {
               <td className="px-4 py-3 font-mono text-xs text-fg-muted">
                 #{run.run_log_id}
               </td>
-              <td className="px-4 py-3 text-fg">{run.agent}</td>
+              <td className="px-4 py-3 text-fg">{agentDisplayName(run.agent)}</td>
               <td className="px-4 py-3 text-right text-fg">{run.orders_scanned}</td>
               <td className="px-4 py-3 text-right">
                 {run.actions_proposed > 0 ? (

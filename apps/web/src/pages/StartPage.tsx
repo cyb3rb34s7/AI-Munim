@@ -6,7 +6,7 @@ import { StartDemoForm, useAuthContext } from '@/modules/auth';
 export function StartPage() {
   const { user, isLoading } = useAuthContext();
   if (isLoading) return null;
-  if (user !== null) return <Navigate to="/chat" replace />;
+  if (user !== null) return <Navigate to="/onboarding" replace />;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg p-6 text-fg">

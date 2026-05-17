@@ -28,7 +28,7 @@ const successShellSchema = z.object({
 
 const base: KyInstance = ky.create({
   prefixUrl: API_PREFIX,
-  timeout: 30_000,
+  timeout: 90_000,
   retry: { limit: 1, methods: ['get'] },
   credentials: 'include',
 });

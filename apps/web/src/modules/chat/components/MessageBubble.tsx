@@ -1,50 +1,86 @@
+import { Fragment, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
-import { Avatar, AvatarFallback } from '@/shared/ui';
+import { Avatar, AvatarFallback, Tooltip, TooltipContent, TooltipTrigger } from '@/shared/ui';
 import { CitationBadge } from './CitationBadge';
 import { fadeUp } from '@/shared/utils/motion';
 import type { ChatMessage } from '@/modules/chat/hooks/useChat';
 import type { RowCitation } from '@/modules/chat/api/client';
 
-const CITE_RE = /\[cite:([\d,\s]+)\]/g;
+const UNVERIFIED_SENTINEL = '[unverified number removed]';
 
-type Part = { kind: 'text'; value: string } | { kind: 'cite'; citations: RowCitation[] };
-
-function parseText(text: string, citations: RowCitation[] | undefined): Part[] {
-  const byId = new Map<number, RowCitation>(citations?.map((c) => [c.record_id, c]) ?? []);
-  const parts: Part[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  CITE_RE.lastIndex = 0;
-  while ((match = CITE_RE.exec(text)) !== null) {
-    const before = text.slice(lastIndex, match.index);
-    if (before) parts.push({ kind: 'text', value: before });
-    const resolved = match[1]
-      .split(',')
-      .map((s) => Number.parseInt(s.trim(), 10))
-      .filter((n) => Number.isFinite(n))
-      .map((id) => byId.get(id))
-      .filter((c): c is RowCitation => c !== undefined);
-    if (resolved.length > 0) parts.push({ kind: 'cite', citations: resolved });
-    lastIndex = match.index + match[0].length;
-  }
-  if (lastIndex < text.length) {
-    parts.push({ kind: 'text', value: text.slice(lastIndex) });
-  }
-  return parts;
+function UnverifiedPlaceholder() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-baseline text-fg-subtle italic cursor-help underline decoration-dotted decoration-fg-subtle/60 underline-offset-2">
+          a number
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">
+        <div className="text-xs text-fg-muted leading-relaxed">
+          I had a number here but couldn't trace it back to a specific row, so I
+          dropped it rather than show something unverified. Try asking the question
+          again — the model often picks up the citation on a retry.
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
-function renderAssistantText(text: string, citations: RowCitation[] | undefined) {
-  return parseText(text, citations).map((part, i) => {
-    if (part.kind === 'text') {
-      return <span key={i}>{part.value}</span>;
+// Matches `<claim>[cite:N,M,...]` where <claim> is either a number with optional
+// currency prefix and optional trailing unit/word (e.g. "Rs.6796.00", "4 orders",
+// "12%", "₹2,500"), OR any single word as a fallback. The regex captures the
+// claim text in group 1 and the comma-separated id list in group 2.
+const CITED_CLAIM_RE =
+  /((?:₹|Rs\.?\s*|\$)?\d[\d,.]*(?:\s*%|\s+[\w%]+)?|\b\w+)\s*\[cite:([\d,\s]+)\]/g;
+const BARE_CITE_RE = /\[cite:[\d,\s]+\]/g;
+
+function renderAssistantText(text: string, citations: RowCitation[] | undefined): ReactNode[] {
+  const byId = new Map<number, RowCitation>(citations?.map((c) => [c.record_id, c]) ?? []);
+  const out: ReactNode[] = [];
+  let cursor = 0;
+  CITED_CLAIM_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = CITED_CLAIM_RE.exec(text)) !== null) {
+    const start = match.index;
+    const claim = match[1];
+    if (start > cursor) {
+      out.push(text.slice(cursor, start));
     }
-    return (
-      <span key={i} className="inline-flex items-baseline">
-        {part.citations.map((c) => (
-          <CitationBadge key={c.record_id} citation={c} />
-        ))}
-      </span>
-    );
+    const ids = match[2]
+      .split(',')
+      .map((s) => Number.parseInt(s.trim(), 10))
+      .filter((n) => Number.isFinite(n));
+    const resolved = ids
+      .map((id) => byId.get(id))
+      .filter((c): c is RowCitation => c !== undefined);
+    if (resolved.length > 0) {
+      out.push(<CitationBadge citations={resolved}>{claim}</CitationBadge>);
+    } else {
+      out.push(claim);
+    }
+    cursor = start + match[0].length;
+  }
+  let trailing = text.slice(cursor);
+  trailing = trailing.replace(BARE_CITE_RE, '');
+  if (trailing.length > 0) out.push(trailing);
+
+  return out.flatMap((piece, i) => {
+    if (typeof piece !== 'string') return [<Fragment key={`f${i}`}>{piece}</Fragment>];
+    if (!piece.includes(UNVERIFIED_SENTINEL)) {
+      return [<Fragment key={`s${i}`}>{piece}</Fragment>];
+    }
+    const chunks = piece.split(UNVERIFIED_SENTINEL);
+    const result: ReactNode[] = [];
+    chunks.forEach((chunk, idx) => {
+      if (chunk.length > 0) {
+        result.push(<Fragment key={`s${i}-${idx}t`}>{chunk}</Fragment>);
+      }
+      if (idx < chunks.length - 1) {
+        result.push(<UnverifiedPlaceholder key={`s${i}-${idx}u`} />);
+      }
+    });
+    return result;
   });
 }
 
