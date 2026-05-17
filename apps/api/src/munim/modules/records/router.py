@@ -18,7 +18,7 @@ def list_endpoint(
     request: Request,
     source_system: str | None = Query(default=None),
     entity_type: str | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=200, ge=1, le=200),
     merchant_id: str = Depends(get_current_merchant_id),
     session: Session = Depends(get_session),
 ) -> SuccessEnvelope[RecordsListResponse]:

@@ -19,6 +19,26 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-17 — records page — IST dates, source chips, friendly labels
+
+**What changed:** The records table moves from "ISO blob + raw lowercase source string + 50-row cap" to a legible, filterable view.
+
+- Backend `list_endpoint` default limit: 50 → 200 (one-line bump, same `le=200` cap). At ~96 demo rows, the first page now shows every row; without the bump, a fresh Shiprocket sync's 50 newest-fetched rows pushed Shopify + Meta below the fold.
+- New `apps/web/src/shared/utils/fmtIST.ts` — IST renderer (en-IN locale, Asia/Kolkata, 12-hour). Used in the records table; can be reused in run detail later. Raises on invalid input rather than silently rendering a placeholder.
+- Source filter chips (All / Shopify / Meta Ads / Shiprocket) drive a query param; chips and the records query key are typed via the new `RecordsSourceFilter` `as const` enum.
+- Source column: friendly label + colored dot (lavender / pop / success — existing tokens, no new colors). Entity column: `order` → "Order", `shipment` → "Shipment", `ad_spend` → "Ad spend".
+- Empty state for a fresh `/auth/start`-but-no-`/auth/onboard` workspace: "Your demo workspace is empty. Run onboarding to load demo data." + button → `/onboarding`. Required extending `EmptyState` with an optional `action` prop.
+- Honest cap line at the bottom: when 200 rows render, "Showing first 200 of your records — sync filtering coming soon."
+- `RECORDS_LIST_QUERY_KEY` became a function of the filter; `useSyncMutation` now invalidates the bare `['records']` prefix so every variant refetches.
+
+**Why:** Phase 7 left the records page as a developer tool. With the chat citation contract reading from this table, a reviewer who clicks into Records gets a first impression of the whole data model — if it looks like a debug log, the trust on every grounded number drops. Friendly labels + IST + filter chips raise the bar to "I'd hand this to a merchant."
+
+**Files touched:** `apps/api/src/munim/modules/records/router.py`, `apps/web/src/shared/utils/fmtIST.ts` (new), `apps/web/src/shared/components/EmptyState.tsx`, `apps/web/src/modules/records/{api/records.api.ts,hooks/useRecords.ts,types/record.types.ts,components/RecordsTable.tsx,components/RecordsPage.tsx,index.ts}`, `apps/web/src/modules/connectors/hooks/useSyncMutation.ts`.
+
+**Reverts cleanly?:** yes.
+
+---
+
 ## 2026-05-17 — onboarding wizard with animated demo seed
 
 **What changed:** The demo-data opt-in moves from "silently pre-seeded by `/auth/start`" to "explicit step in the onboarding wizard."

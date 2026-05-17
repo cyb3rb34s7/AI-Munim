@@ -8,7 +8,10 @@
 
 ## Now
 
-Final-polish pass before deploy (2026-05-17). Tasks 1–2 done.
+Final-polish pass before deploy (2026-05-17). Tasks 1–3 done.
+
+Task 3 (records page polish): Backend default `limit` bumped from 50 → 200 so Shiprocket's 50 fresh rows don't bury the older 6 Shopify + 40 Meta rows on the first page. New `fmtIST` utility renders fetched_at as IST (en-IN locale). Source chips (All / Shopify / Meta Ads / Shiprocket) drive `source_system` query param. Friendly source labels + colored dots (lavender Shopify, pop-amber Meta, success-green Shiprocket) + friendly entity labels (Order/Shipment/Ad spend). Empty state offers a link to `/onboarding`. Honest "Showing first 200 — sync filtering coming soon" notice when the table hits the cap. RECORDS_LIST_QUERY_KEY became a function of the filter; useSyncMutation invalidates the bare `['records']` prefix to catch all variants.
+
 
 Task 1 (Shopify demo sync bug): Two paid lessons. (1) `_iter_demo_orders` required `fixture_path` from the credential blob, but the Phase 9 seed wrote `{"status": "demo"}` only → "Sync now" on Shopify raised ValueError → user saw `connector.sync_failed`. (2) Phase 9 `_seed_shopify` wrote rows directly via RowSink, never going through `connector.sync_full`, so `last_sync_at` never got stamped. Fix routes all three connectors through `_seed_demo_connector` (which now stamps `last_sync_at` after sync_full); ShopifyClient loads the package fixture directly (path: `Path(__file__).parent / "fixtures" / "orders.json"`).
 

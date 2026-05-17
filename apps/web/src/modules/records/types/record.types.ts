@@ -24,6 +24,15 @@ export const recordsListResponseSchema = z.object({
   limit: z.number().int(),
 });
 
+export const RecordsSourceFilter = {
+  All: 'all',
+  Shopify: 'shopify',
+  MetaAds: 'meta_ads',
+  Shiprocket: 'shiprocket',
+} as const;
+export type RecordsSourceFilter =
+  (typeof RecordsSourceFilter)[keyof typeof RecordsSourceFilter];
+
 export type RecordSummary = z.infer<typeof recordSummarySchema>;
 export type RecordDetail = z.infer<typeof recordDetailSchema>;
 export type RecordsListResponse = z.infer<typeof recordsListResponseSchema>;
