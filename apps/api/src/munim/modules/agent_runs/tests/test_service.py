@@ -13,7 +13,9 @@ from munim.shared.constants import (
 )
 
 
-def test_trigger_agent_wraps_malformed_record_data_in_typed_failure(session: Session) -> None:
+async def test_trigger_agent_wraps_malformed_record_data_in_typed_failure(
+    session: Session,
+) -> None:
     row = Record(
         merchant_id="m_default",
         source_system=SourceSystem.SHOPIFY.value,
@@ -33,12 +35,12 @@ def test_trigger_agent_wraps_malformed_record_data_in_typed_failure(session: Ses
     session.commit()
 
     with pytest.raises(AgentRunFailedError) as exc_info:
-        trigger_agent(session, "m_default", AgentName.RTO_MITIGATOR)
+        await trigger_agent(session, "m_default", AgentName.RTO_MITIGATOR)
     assert exc_info.value.code == "agent.run_failed"
     assert exc_info.value.http_status == 500
 
 
-def test_trigger_agent_naive_timestamp_wrapped_as_typed_failure(session: Session) -> None:
+async def test_trigger_agent_naive_timestamp_wrapped_as_typed_failure(session: Session) -> None:
     row = Record(
         merchant_id="m_default",
         source_system=SourceSystem.SHOPIFY.value,
@@ -60,4 +62,4 @@ def test_trigger_agent_naive_timestamp_wrapped_as_typed_failure(session: Session
     session.commit()
 
     with pytest.raises(AgentRunFailedError):
-        trigger_agent(session, "m_default", AgentName.RTO_MITIGATOR)
+        await trigger_agent(session, "m_default", AgentName.RTO_MITIGATOR)

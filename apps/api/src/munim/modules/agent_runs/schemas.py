@@ -27,6 +27,11 @@ class AgentRunDetail(BaseModel):
     orders_scanned: int
     actions_proposed: int
     decisions: list[dict[str, Any]]
+    # --- Briefing-only fields. None for the rto_mitigator agent. ---
+    sector: str | None = None
+    narrative: str | None = None
+    proposed_actions: list[dict[str, Any]] | None = None
+    citations: list[dict[str, Any]] | None = None
 
 
 class AgentRunListResponse(BaseModel):

@@ -1,5 +1,7 @@
 from sqlmodel import Session, col, select
 
+from munim.agents.daily_briefing.constants import Sector as BriefingSector
+from munim.agents.daily_briefing.service import run_briefing
 from munim.agents.rto_mitigator.agent import RTOMitigatorAgent
 from munim.models import RunLog
 from munim.modules.agent_runs.schemas import (
@@ -30,14 +32,54 @@ class AgentRunNotFoundError(MunimError):
     message = "Agent run not found."
 
 
+class SectorRequiredError(MunimError):
+    code = ErrorCode.VALIDATION_MISSING_FIELD.value
+    http_status = 400
+    message = "sector is required for the daily-briefing agent."
+
+
 _AGENTS: dict[AgentName, type[RTOMitigatorAgent]] = {
     AgentName.RTO_MITIGATOR: RTOMitigatorAgent,
 }
 
 
-def trigger_agent(
-    session: Session, merchant_id: str, agent_name: AgentName
+async def trigger_agent(
+    session: Session,
+    merchant_id: str,
+    agent_name: AgentName,
+    *,
+    sector: str | None = None,
+    trace_id: str | None = None,
 ) -> TriggerAgentResponse:
+    if agent_name is AgentName.DAILY_BRIEFING:
+        if sector is None:
+            raise SectorRequiredError(
+                message="sector is required for the daily-briefing agent.",
+                details={"agent": agent_name.value},
+            )
+        try:
+            sector_enum = BriefingSector(sector)
+        except ValueError as exc:
+            raise SectorRequiredError(
+                message=f"Unknown sector {sector!r}.",
+                details={
+                    "sector": sector,
+                    "valid": [s.value for s in BriefingSector],
+                },
+            ) from exc
+        briefing_summary = await run_briefing(session, merchant_id, sector_enum, trace_id=trace_id)
+        return TriggerAgentResponse(
+            run=AgentRunSummary(
+                run_log_id=briefing_summary.run_log_id,
+                run_id=briefing_summary.run_id,
+                agent=agent_name.value,
+                orders_scanned=briefing_summary.items_scanned,
+                actions_proposed=briefing_summary.actions_proposed,
+                started_at=briefing_summary.started_at,
+                finished_at=briefing_summary.finished_at,
+            )
+        )
+
     agent_cls = _AGENTS.get(agent_name)
     if agent_cls is None:
         raise AgentUnknownError(
@@ -103,13 +145,18 @@ def get_agent_run(session: Session, merchant_id: str, run_log_id: int) -> AgentR
             message=f"Agent run {run_log_id} not found.",
             details={"run_log_id": run_log_id},
         )
+    detail = row.detail_json
     return AgentRunDetail(
         run_log_id=row.id if row.id is not None else 0,
-        run_id=row.detail_json["run_id"],
-        agent=row.detail_json["agent"],
+        run_id=detail["run_id"],
+        agent=detail["agent"],
         started_at=row.started_at,
         finished_at=row.finished_at if row.finished_at else row.started_at,
-        orders_scanned=row.detail_json["orders_scanned"],
-        actions_proposed=row.detail_json["actions_proposed"],
-        decisions=row.detail_json["decisions"],
+        orders_scanned=detail["orders_scanned"],
+        actions_proposed=detail["actions_proposed"],
+        decisions=detail.get("decisions", []),
+        sector=detail.get("sector"),
+        narrative=detail.get("narrative"),
+        proposed_actions=detail.get("proposed_actions"),
+        citations=detail.get("citations"),
     )

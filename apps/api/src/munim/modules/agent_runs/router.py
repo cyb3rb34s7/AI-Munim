@@ -24,9 +24,10 @@ router = APIRouter(tags=["agent-runs"])
     "/agents/{name}/run",
     response_model=SuccessEnvelope[TriggerAgentResponse],
 )
-def trigger_agent_endpoint(
+async def trigger_agent_endpoint(
     name: str,
     request: Request,
+    sector: str | None = Query(default=None),
     merchant_id: str = Depends(get_current_merchant_id),
     session: Session = Depends(get_session),
 ) -> SuccessEnvelope[TriggerAgentResponse]:
@@ -37,7 +38,13 @@ def trigger_agent_endpoint(
             message=f"Agent {name!r} is not registered.",
             details={"agent": name},
         ) from exc
-    result = trigger_agent(session, merchant_id, agent_name)
+    result = await trigger_agent(
+        session,
+        merchant_id,
+        agent_name,
+        sector=sector,
+        trace_id=request.state.trace_id,
+    )
     session.commit()
     return SuccessEnvelope(data=result, trace_id=request.state.trace_id)
 
