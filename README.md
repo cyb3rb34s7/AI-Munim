@@ -16,10 +16,11 @@
 - [Connectors — which 3 and why](#connectors--which-3-and-why)
 - [Schema — why this shape](#schema--why-this-shape)
 - [Scale — demonstrated, not aspirational](#scale--demonstrated-not-aspirational)
-- [Honest limitations](#honest-limitations)
-- [Tech choices](#tech-choices)
+- [Eval — where it breaks](#eval--where-it-breaks)
+- [Hours spent](#hours-spent)
 - [What we'd do with another week](#what-wed-do-with-another-week)
 - [AI tool usage — honest accounting](#ai-tool-usage--honest-accounting)
+- [Tech choices](#tech-choices)
 - [Deeper docs](#deeper-docs)
 - [Acknowledgments](#acknowledgments)
 
@@ -239,19 +240,51 @@ Ranked failure modes (full version in [`docs/architecture.md` §10](docs/archite
 
 **Sketched but not built:** `scripts/loadtest_visitors.py` (N parallel visitors hitting `/auth/start` + `/chat`, measuring p50/p95/p99); real auth; webhook ingestion.
 
-## Honest limitations
+## Eval — where it breaks
 
-- **No real auth.** Session is anonymous. An attacker with another visitor's cookie value gets their session. Acceptable for a hiring demo; deliberate Phase 10 work.
-- **No email; no password reset; no user invites.**
-- **Shopify real OAuth disabled on the deployed env.** Each visitor can't connect their own Shopify store; demo data is the only Shopify path on the deployed URL. The connector code path stays; it's a runtime feature flag.
-- **LLM cost ceiling.** 50 concurrent reviewers chatting 5 times each ≈ 250 LLM calls. Acceptable at current free-tier rate limits.
-- **Render free tier cold start** (~30s on first hit after 15min idle).
-- **SQLite single-writer.** Demo seeding writes ~96 rows per `/auth/start`, fine for the demo; not for paying customers.
-- **Paraphrase verification of citations.** The post-processor catches uncited numbers. It does *not* verify that the number after `[cite:N]` matches the actual value in row N. Mitigation roadmap: numeric-exact comparison against citation rows.
-- **No real OAuth for Meta and Shiprocket.** They ship as demo connectors with frozen fixtures. The `BaseConnector` interface is identical to Shopify's.
-- **Polling only, no webhooks.** Means up to 30 minutes of staleness when the agent is on a real schedule (Phase 6 agent is manual-trigger only for v0).
-- **RTO agent is rule-based.** Weights are sensible defaults, not model-trained. Drift is real; retraining cadence is documented.
-- **Demo fixtures are realistic but synthetic.**
+The honest list of what fails when each headline feature is actually poked. Grouped by surface, with the empirical failure mode, not just "limitations."
+
+### Chat / citation contract
+
+- **Paraphrase verification not in v0** — the highest-value gap. The model can type `₹15,000[cite:N]` while row N actually says `₹15,750`. The provenance is honest; the digit string isn't checked. Hover-verifiable by a careful user; not auto-caught. Mitigation roadmap: numeric-exact comparison against citation rows.
+- **Derived counts sometimes drop their cite marker.** When the model summarises ("2 orders at risk"), it occasionally writes the number without `[cite:A,B]` → enforcer strips it → user sees the friendly "a number" placeholder. System-prompt nudges help; not 100% reliable.
+- **Cross-source math is sometimes wrong even when individual numbers are cited.** Tested live: asked "AOV from the best Meta campaign?" — got back `₹14,694`, which was actually the total Shopify revenue, not divided by purchase count. The citation contract proves *"this number came from a real row,"* it does not prove *"the LLM did the right arithmetic."* Citations let a careful reviewer notice; nothing auto-flags interpretation errors.
+- **Tool-loop occasionally exhausts pydantic-ai's `request_limit=50`** on chained queries. User sees a one-shot 502; retry usually works.
+
+### Agent (RTO Risk Mitigator)
+
+- **Customer-history sparsity.** Customers with <3 shipments fall back to the population baseline (0.2). Most demo customers stay there. Real new merchants would see this trade-off too for the first 30–90 days of operation.
+- **Pincode high-risk list is a static 6-entry seed.** No automated learning from observed RTO outcomes.
+- **Weights are fixed defaults.** Festive seasons spike RTO and drift the weights stale. Retraining cadence documented; not implemented.
+
+### Connectors
+
+- **Meta Ads + Shiprocket ship as demo-mode** with real-shape fixtures from the providers' API docs. `BaseConnector` swap to real OAuth is mechanical but isn't shipped.
+- **Shopify OAuth is disabled on the deployed URL.** No per-visitor Partner App on the demo. Works locally with `SHOPIFY_OAUTH_ENABLED=true`.
+- **No webhook ingestion.** Polling-only. Real-mode staleness would be up to 30 minutes between scheduled syncs.
+
+### Auth
+
+- **Anonymous session cookie behaves like a bearer token.** Anyone with another visitor's signed cookie value sees their data. Acceptable for a hiring demo, dangerous in production. No email, no password, no invite, no recovery — all deliberate Phase 10 scope.
+
+### Infrastructure
+
+- **SQLite single-writer locally.** Intermittent `sqlite3.InterfaceError` under chained-tool-call thread contention. **Goes away on Render** because the deployed env ships managed Postgres.
+- **Render free tier cold-start ~30s** after 15min idle on a first hit. Subsequent requests are warm.
+- **LLM cost ceiling.** ~250 chat calls per 50 reviewers × 5 questions each. Free-tier rate limits hold for the demo window; not for paying-customer load.
+
+### Frontend
+
+- **Bundle ~1MB pre-gzip.** Recharts + Radix + framer-motion. No route-level code-split. Acceptable for an admin SPA, not for marketing-perf concerns.
+- **Desktop-first.** FeedPanel hides below 1024px; below 768px the layout breaks. No mobile pass yet.
+
+## Hours spent
+
+**~8–10 hours of active work over 5 calendar days, across 4–5 sessions** (2026-05-13 → 2026-05-17).
+
+The first two days were entirely docs and design iteration — the brief read, the persona sharpened, the connector landscape researched and justified ([`docs/research.md`](docs/research.md)), the schema shape argued out ([`docs/architecture.md` §4](docs/architecture.md)), the citation contract designed across its four enforcement layers, the agent's signal model laid out, the project's conventions written down ([`docs/conventions.md`](docs/conventions.md)). No code shipped in days 1–2; just sharpening what would get built.
+
+Days 3–5 were the implementation phases via subagent-driven development. Each phase had a plan (`docs/plans/YYYY-MM-DD-phase-N-*.md`), a dispatched coder subagent, a dispatched reviewer subagent, a fix cycle, manual smoke, and push. The commit history follows the phase rhythm — `feat(scope):` per task, `fix(scope):` per review finding, `docs(scope):` per phase docs update.
 
 ## Tech choices
 
@@ -279,15 +312,29 @@ In rough priority order:
 
 ## AI tool usage — honest accounting
 
-The brief asked us to be honest about what we wrote versus what an LLM wrote. We will be.
+The brief said *"use them, be honest about what you wrote vs what the LLM wrote — that's signal, not stigma."* Here's the honest read.
 
-The full statement goes in this section on submission, but the pattern is:
+### What I shaped (the human directing the build)
 
-- Research, framework comparisons, doc structure, and architectural reasoning — primarily AI-assisted (Claude). Prompts and decisions ours; words structured collaboratively.
-- All code that ships will be reviewed line-by-line by a human author. No commit goes in that the author cannot explain.
-- The citation contract design (the four-layer enforcement) was AI-assisted in framing but the implementation is ours.
+- **The entire architecture, raw, before any code.** The universal single-table polymorphic schema with row-level provenance, the four-layer citation contract, the RTO Risk Mitigator's signal model (named signals, weighted sum, threshold tree, no LLM in the loop), the `BaseConnector` ABC + `RowSink` writer pattern, the citation chip → tooltip → record drill-down UX, the deployment target. I proposed each direction first; we iterated multiple times before any of it got typed.
+- **Project rules and conventions** ([`docs/conventions.md`](docs/conventions.md)). No silent fallbacks, no magic strings in branches, `Decimal` for money everywhere, IST↔UTC at the wire boundary, `trace_id` threaded through HTTP→DB→LLM, the citation contract is fail-closed by design, no broad `except Exception`, meaningful-tests-only filter (§13.4). These rules drove what got rejected at reviewer time.
+- **Methodology — subagent-driven development.** Plan → one coder subagent per phase → one reviewer subagent per phase → apply findings → smoke → docs + push. Captured in `CLAUDE.md`. Plans in `docs/plans/` are how the work was scoped, not artifacts of AI autonomy.
+- **Dependency choices** with WHYs in [`docs/architecture.md` §2](docs/architecture.md). FastAPI + Pydantic + SQLModel + PydanticAI + SQLite-with-JSON for the backend; Vite + React 19 + Tailwind v4 + framer-motion + Recharts + Sonner + shadcn-on-Radix for the frontend; Render free tier for deploy.
+- **Product calls** that came from live testing and pushback — the onboarding wizard (replaced silent auto-seed), cookie session auth (rejected JWT-in-localStorage), Meta + Shiprocket as demo-mode (rejected real-OAuth-on-deploy because it would burn reviewer setup time), the citation chip's visual design (rejected three earlier versions before the dotted-underline pattern), the chat suggestions redesigned twice based on what looked ugly in screenshots.
+- **Review of every diff before push.** Each phase's reviewer-subagent surfaced findings; I read every one and decided which to fix vs defer. Real pushback caught: the Shopify demo sync bug, the timezone bug in the agent's time-of-order signal, the `[unverified number removed]` sentinel leaking into the UI, the logout→login routing to `/chat` instead of `/onboarding`, the engineer-prose error message bubbling to the chat UI.
 
-This section will be filled in fully on submission with specific call-outs per area.
+### What Claude (the LLM) did
+
+- **Wrote ~95% of the code** via the subagent-driven development workflow. Plans I scoped → coder subagent implemented (one dispatch per phase, walking the plan top-to-bottom committing per task) → reviewer subagent critiqued the diff → I applied fixes inline. Tests included.
+- **Drafted this README, [`docs/architecture.md`](docs/architecture.md), [`docs/research.md`](docs/research.md), [`docs/conventions.md`](docs/conventions.md), every plan file in `docs/plans/`, and [`CHANGELOG.md`](CHANGELOG.md).** Each follows the framing I set — what to argue, which tradeoffs to name, which paid lessons to capture. The structure is mine; the prose is collaborative.
+- **Helped debug and test** — including using a headless browser agent during the final smoke to walk the logout→login flow, surface the Shopify sync regression, and verify the chat citation rendering changes.
+
+### Where the line gets fuzzy (worth naming)
+
+- Code I'd have written by hand vs. code AI expedited: roughly **4–5× compression** on time-to-typed-code. The decisions, the rules, the methodology, the reviews are mine; the typing isn't.
+- The choice of subagent-driven development with explicit plan + review gates was deliberate process design, not "let AI do it." That's the thing that made AI-written output reviewable instead of opaque.
+
+The signal here, to the rubric's word: a similar shape would ship from the same constraints; what AI accelerates is the speed from clearly-scoped plan to reviewable code, not the design judgment itself.
 
 ## Deeper docs
 
