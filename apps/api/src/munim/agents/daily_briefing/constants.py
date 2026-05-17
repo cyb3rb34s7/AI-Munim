@@ -40,8 +40,7 @@ SECTOR_HINT: dict[Sector, str] = {
         "low repurchase frequency."
     ),
     Sector.GENERIC: (
-        "Watch for RTO patterns, ad-spend efficiency, and customer "
-        "concentration risk."
+        "Watch for RTO patterns, ad-spend efficiency, and customer concentration risk."
     ),
 }
 
