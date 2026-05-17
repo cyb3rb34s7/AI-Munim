@@ -19,6 +19,16 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-17 — phase 11 hotfix 3 — same UsageLimits cap on the chat agent
+
+**What changed:** Added `UsageLimits(request_limit=15)` to the chat agent's `agent.run(...)` and a typed `UsageLimitExceeded → LLMUnavailableError` mapping. Same seatbelt the briefing got in hotfix 2 — both surfaces share the same tools and the same paid LLM, so they need the same protection. Chat's cap is slightly higher (15 vs. 12) because chat questions are more open-ended than the fixed briefing prompt.
+
+**Why:** Half a fix is no fix. After capping the briefing in hotfix 2, the chat agent was still vulnerable to the same loop pathology — it just hadn't tripped yet because the chat system prompt happens to force sequential workflow. That's luck, not engineering. Capping both surfaces makes this a structural fix, not a per-agent workaround.
+
+**Files touched:** `apps/api/src/munim/chat/agent.py`, `context.md` (guardrail updated to reflect both surfaces are now capped).
+
+**Reverts cleanly?:** yes — additive only.
+
 ## 2026-05-17 — phase 11 hotfix 2 — cap briefing tool loop, tighten prompt
 
 **What changed:** Added `UsageLimits(request_limit=12)` to the briefing agent's `agent.run(...)` call. New typed `LLMUnavailableError` mapping for `UsageLimitExceeded`. Rewrote the system-prompt workflow as directive: "ONE unfiltered pass + at most one filtered follow-up per tool; compose with what you have; do not re-query."

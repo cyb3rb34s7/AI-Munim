@@ -12,9 +12,14 @@ from typing import Any
 
 import httpx
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior
+from pydantic_ai.exceptions import (
+    ModelHTTPError,
+    UnexpectedModelBehavior,
+    UsageLimitExceeded,
+)
 from pydantic_ai.messages import ToolReturnPart
 from pydantic_ai.models import Model
+from pydantic_ai.usage import UsageLimits
 
 from munim.chat.enforcer import enforce_grounded_answer
 from munim.chat.tools import (
@@ -215,10 +220,31 @@ async def answer_question(
         question_len=len(question),
     )
 
+    # Hard cap on LLM turns. A healthy chat answer is 2-6 turns (initial,
+    # 1-3 tool calls, optional follow-up tool, final). 15 leaves headroom
+    # for genuine multi-step reasoning while still cutting off the
+    # "keep re-querying the same filter" pathology that surfaced on the
+    # briefing agent (see context.md Phase 11 hotfix 2). Chat questions are
+    # more open-ended than the fixed briefing prompt, hence 15 vs. 12.
+    usage_limits = UsageLimits(request_limit=15)
+
     try:
-        run_result = await agent.run(question, deps=ctx)
+        run_result = await agent.run(question, deps=ctx, usage_limits=usage_limits)
     except MunimError:
         raise
+    except UsageLimitExceeded as exc:
+        log.warning(
+            "chat.agent.tool_loop_exhausted",
+            exc_str=str(exc)[:200],
+            merchant_id=ctx.merchant_id,
+        )
+        raise LLMUnavailableError(
+            message=(
+                "The model couldn't converge on an answer within the tool-call "
+                "budget. Try rephrasing the question."
+            ),
+            details={"exc_type": "UsageLimitExceeded", "exc_str": str(exc)[:500]},
+        ) from exc
     except (ModelHTTPError, UnexpectedModelBehavior, httpx.HTTPError) as exc:
         log.warning(
             "chat.agent.llm_unavailable",

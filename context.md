@@ -87,7 +87,7 @@ Every entry is a paid lesson. Read at the start of every session. Never repeat o
 
 **Solution:** Two-part fix. (a) Rewrote the workflow as directive: "ONE unfiltered pass + at most one filtered follow-up per tool; compose with what you have; do not re-query identical filters; ~6 tool calls total max." (b) Added `UsageLimits(request_limit=12)` to the briefing agent's `agent.run(...)`. Added typed `UsageLimitExceeded → LLMUnavailableError` mapping in `daily_briefing.service` so loop-exhaustion surfaces to the user as `chat.llm_unavailable` instead of leaking as `system.unexpected`.
 
-**Guardrail:** Every PydanticAI agent that hits an external paid LLM MUST run with a `UsageLimits` cap and MUST handle `UsageLimitExceeded` explicitly. Tool loops are a known failure mode; this is the seatbelt. The chat agent's loop has been protected by its sequential workflow prompt — but the same `UsageLimits` should be added there opportunistically when we touch that surface.
+**Guardrail:** Every PydanticAI agent that hits an external paid LLM MUST run with a `UsageLimits` cap and MUST handle `UsageLimitExceeded` explicitly. Tool loops are a known failure mode; this is the seatbelt. The chat agent now also runs with `UsageLimits(request_limit=15)` (slightly higher than the briefing's 12 because chat questions are more open-ended) and maps `UsageLimitExceeded → LLMUnavailableError`. Any future LLM-driven surface that uses these tools must do the same; the RTO mitigator is deterministic Python and exempt.
 
 ### 2026-05-17 (Phase 11 hotfix) — PydanticAI parallel tool calls race a single SQLAlchemy Session → `InvalidRequestError: concurrent operations are not permitted`
 
