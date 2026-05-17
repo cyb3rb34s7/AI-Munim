@@ -24,6 +24,7 @@ _DEFAULT_LIMIT = 250
 _MAX_RETRIES_ON_429 = 5
 _DEFAULT_RETRY_AFTER_SEC = 2.0
 _LINK_NEXT_PATTERN = re.compile(r'<([^>]+)>;\s*rel="next"')
+_DEMO_FIXTURE_PATH = Path(__file__).parent / "fixtures" / "orders.json"
 
 
 class ShopifyClient:
@@ -67,15 +68,9 @@ class ShopifyClient:
         await self._http_client.aclose()
 
     async def _iter_demo_orders(self) -> AsyncIterator[dict[str, Any]]:
-        fixture_path_str = self._credential.blob.get("fixture_path")
-        if not fixture_path_str:
-            raise ValueError(
-                "Demo credential is missing 'fixture_path' — set blob['fixture_path']."
-            )
-        fixture_path = Path(fixture_path_str)
-        with fixture_path.open(encoding="utf-8") as handle:
+        with _DEMO_FIXTURE_PATH.open(encoding="utf-8") as handle:
             payload = json.load(handle)
-        for order in payload["orders"]:
+        for order in payload["data"]:
             yield order
 
     async def _iter_real_orders(self) -> AsyncIterator[dict[str, Any]]:

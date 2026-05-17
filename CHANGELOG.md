@@ -19,6 +19,23 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-17 — shopify demo sync loads package fixture, last_sync_at stamps
+
+**What changed:** Two coupled bug fixes that landed Phase 9's Shopify demo path on the same shape Meta and Shiprocket already used.
+
+- `ShopifyClient._iter_demo_orders` now reads `apps/api/src/munim/connectors/shopify/fixtures/orders.json` from a hardcoded package path. The credential blob's `fixture_path` is no longer required (or read).
+- `seed.py::_seed_demo_connector` now drives all three connectors (Shopify, Meta, Shiprocket) through `connector.sync_full`, and stamps `credential_row.last_sync_at` after each successful run. The old `_seed_shopify` direct-to-RowSink path is gone.
+- `service.py::connect_demo` drops `fixture_path` from the Shopify blob it writes; the legacy `_resolve_demo_fixture_path` helper is removed (dead).
+- New test `test_shopify_demo_sync_uses_package_fixture` locks the contract. Existing connector tests migrated from 3-row to 6-row expectations.
+
+**Why:** Phase 9's seed wrote `{"status": "demo"}` only, but Phase 2's client demanded `fixture_path` in the blob → "Sync now" failed for every new visitor. Also: the direct-to-RowSink seed never stamped `last_sync_at`, so the UI's "Synced N seconds ago" was permanently empty. The root cause is documented in `context.md` (2026-05-17 entry, Problems & solutions).
+
+**Files touched:** `apps/api/src/munim/connectors/shopify/client.py`, `apps/api/src/munim/modules/auth/seed.py`, `apps/api/src/munim/modules/connectors/service.py`, plus the Shopify connector / client / service / router test files.
+
+**Reverts cleanly?:** yes.
+
+---
+
 ## 2026-05-16 — Phase 9 review fixes
 
 **What changed:** Reviewer surfaced 4 CRITICAL + 12 IMPORTANT findings; all CRITICAL and the actionable IMPORTANT items addressed in one fix commit.

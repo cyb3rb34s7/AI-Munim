@@ -8,6 +8,8 @@
 
 ## Now
 
+Final-polish pass before deploy (2026-05-17). Task 1 done — Shopify demo sync bug fixed. Two paid lessons: (1) `_iter_demo_orders` required `fixture_path` from the credential blob, but the Phase 9 seed wrote `{"status": "demo"}` only → "Sync now" on Shopify raised ValueError → user saw `connector.sync_failed`. (2) Phase 9 `_seed_shopify` wrote rows directly via RowSink, never going through `connector.sync_full`, so `last_sync_at` never got stamped. Fix routes all three connectors through `_seed_demo_connector` (which now stamps `last_sync_at` after sync_full); ShopifyClient loads the package fixture directly (path: `Path(__file__).parent / "fixtures" / "orders.json"`). 239 backend tests, all gates green.
+
 Phase 9 complete end-to-end (multi-tenant backbone + Docker image + review cycle). 238 backend tests, all gates green. Reviewer surfaced 4 CRITICAL + 12 IMPORTANT; CRITICAL + user-visible IMPORTANT items addressed in one fix commit: `render.yaml autoDeploy → false`; backend `SHOPIFY_OAUTH_ENABLED` flag enforced server-side via new `FeatureDisabledError` (HTTP 403); Sidebar surfaces `display_name` + Sign-out button wired to `useLogout`; cookie-portability positive test added alongside the existing tampered-signature test.
 
 Anonymous session cookie via starlette SessionMiddleware carries `{merchant_id, user_id}`. `POST /auth/start` mints a `Merchant` + `User`, seeds 96 demo rows (6 Shopify orders + 40 Meta insights + 50 Shiprocket shipments) synchronously, sets the cookie, returns `CurrentUser`. Every router reads `merchant_id` via `Depends(get_current_merchant_id)` — no silent fallback. All routers mount under `/api`; dev and prod URLs match. Multi-stage Dockerfile builds the SPA with pnpm + runs FastAPI which serves both `/api/*` and the SPA at `/`. Local `docker build` produces a 1.3GB image; `docker run` end-to-end confirmed. **Ready for the user to connect the GitHub repo to Render and click "Create web service".**
@@ -57,6 +59,16 @@ Ranking re-evaluated at the start of each new phase.
 ## Problems & solutions
 
 Every entry is a paid lesson. Read at the start of every session. Never repeat one.
+
+### 2026-05-17 (final polish) — Phase 9 Shopify demo seed wrote `{"status": "demo"}` but ShopifyClient still demanded blob['fixture_path']
+
+**Problem:** Visitor clicks "Sync now" on Shopify after `/auth/start` → 500 with code `connector.sync_failed`. The Phase 9 `_seed_shopify` wrote the credential blob as `{"status": "demo"}` only (no `fixture_path`). The legacy `ShopifyClient._iter_demo_orders` raised ValueError on missing `fixture_path`, the connector service rewrapped it as `ConnectorSyncError`, the frontend's toast said "Sync failed." Also: `_seed_shopify` upserted rows directly through RowSink instead of going through `connector.sync_full`, so the credentials row's `last_sync_at` never got stamped, and the UI's "Synced N seconds ago" was permanently empty.
+
+**Root cause:** Two separate Shopify fixtures coexisted across phases. Phase 2 stored a fixture path in the blob (legacy `data/fixtures/shopify/orders.json`, 3 orders). Phase 9 added a package fixture (`src/munim/connectors/shopify/fixtures/orders.json`, 6 orders) and a new seed path that bypassed the client. The two paths never converged. Meta/Shiprocket connectors had already adopted the package-fixture pattern (their clients load the fixture by hardcoded path), but Shopify hadn't.
+
+**Solution:** `ShopifyClient._iter_demo_orders` now loads `Path(__file__).parent / "fixtures" / "orders.json"` unconditionally — matches the Meta/Shiprocket pattern. The blob's `fixture_path` is no longer read; the seed path drops it. `_seed_demo_connector` in `seed.py` now handles all three connectors uniformly, including stamping `credential_row.last_sync_at = datetime.now(UTC)` after each successful `sync_full`. New test `test_shopify_demo_sync_uses_package_fixture` locks the new contract; existing tests updated from 3-row to 6-row expectations.
+
+**Guardrail:** When introducing a fixture-loading pattern for a new connector, audit every other connector and bring them to the same pattern in the same phase. "We'll fix the others in a later phase" is exactly how this kind of cross-phase drift happens. The Meta/Shiprocket package-fixture pattern was right in Phase 8; Shopify should have been migrated then.
 
 ### 2026-05-16 (Phase 9) — PowerShell `Set-Content -Encoding UTF8` writes BOM and re-encodes non-ASCII into mojibake
 

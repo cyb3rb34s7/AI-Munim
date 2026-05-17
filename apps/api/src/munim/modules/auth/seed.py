@@ -11,37 +11,33 @@ Seeding is idempotent: the RowSink natural key
 into an update; calling this twice on the same merchant writes zero new
 rows.
 
-The Shopify rows skip the connector + client layer because they don't
-need fixture-path bookkeeping — we load the fixture once here, map each
-row via the canonical mapper (so customer_source_id matches the Shiprocket
-join key), and write directly through the RowSink.
+Every connector runs through `sync_full` so the credentials row's
+`last_sync_at` is stamped — without that, a subsequent click on
+"Sync now" in the UI is the user's first observation that the row was
+ever populated.
 """
 
 import json
-from pathlib import Path
-from typing import Any
+from datetime import UTC, datetime
 
 import httpx
 from sqlmodel import Session, select
 
 from munim.connectors._row_sink import RowSink
-from munim.connectors.base import Credential, SyncContext
+from munim.connectors.base import BaseConnector, Credential, SyncContext
 from munim.connectors.meta_ads.connector import MetaAdsConnector
 from munim.connectors.shiprocket.connector import ShiprocketConnector
-from munim.connectors.shopify.mapper import map_shopify_order_to_normalized
+from munim.connectors.shopify.connector import ShopifyConnector
 from munim.models import ConnectorCredentials
 from munim.shared.constants import (
     ConnectorName,
     CredentialStatus,
-    EntityType,
     SourceSystem,
 )
 
-_SHOPIFY_FIXTURE = Path(__file__).parents[2] / "connectors" / "shopify" / "fixtures" / "orders.json"
-
 
 async def seed_new_merchant(session: Session, merchant_id: str) -> None:
-    _seed_shopify(session, merchant_id)
+    await _seed_demo_connector(session, merchant_id, ConnectorName.SHOPIFY, ShopifyConnector())
     await _seed_demo_connector(session, merchant_id, ConnectorName.META_ADS, MetaAdsConnector())
     await _seed_demo_connector(
         session, merchant_id, ConnectorName.SHIPROCKET, ShiprocketConnector()
@@ -49,26 +45,13 @@ async def seed_new_merchant(session: Session, merchant_id: str) -> None:
     session.flush()
 
 
-def _seed_shopify(session: Session, merchant_id: str) -> None:
-    row_sink = RowSink(session, merchant_id, SourceSystem.SHOPIFY)
-    for raw in _load_shopify_fixture():
-        normalized = map_shopify_order_to_normalized(raw)
-        row_sink.upsert(
-            source_id=str(raw["id"]),
-            entity_type=EntityType.ORDER,
-            raw=raw,
-            normalized=normalized,
-        )
-    _upsert_demo_credential(session, merchant_id, ConnectorName.SHOPIFY)
-
-
 async def _seed_demo_connector(
     session: Session,
     merchant_id: str,
     name: ConnectorName,
-    connector: MetaAdsConnector | ShiprocketConnector,
+    connector: BaseConnector,
 ) -> None:
-    _upsert_demo_credential(session, merchant_id, name)
+    credential_row = _upsert_demo_credential(session, merchant_id, name)
     source_system = SourceSystem(name.value)
     row_sink = RowSink(session, merchant_id, source_system)
     credential = Credential(
@@ -85,8 +68,14 @@ async def _seed_demo_connector(
         )
         await connector.sync_full(ctx)
 
+    credential_row.last_sync_at = datetime.now(UTC)
+    session.add(credential_row)
+    session.flush()
 
-def _upsert_demo_credential(session: Session, merchant_id: str, name: ConnectorName) -> None:
+
+def _upsert_demo_credential(
+    session: Session, merchant_id: str, name: ConnectorName
+) -> ConnectorCredentials:
     blob = json.dumps({"status": CredentialStatus.DEMO.value})
     existing = session.exec(
         select(ConnectorCredentials)
@@ -94,22 +83,17 @@ def _upsert_demo_credential(session: Session, merchant_id: str, name: ConnectorN
         .where(ConnectorCredentials.connector == name.value)
     ).first()
     if existing is None:
-        session.add(
-            ConnectorCredentials(
-                merchant_id=merchant_id,
-                connector=name.value,
-                auth_blob_encrypted=blob,
-                status=CredentialStatus.DEMO.value,
-            )
+        row = ConnectorCredentials(
+            merchant_id=merchant_id,
+            connector=name.value,
+            auth_blob_encrypted=blob,
+            status=CredentialStatus.DEMO.value,
         )
-    else:
-        existing.auth_blob_encrypted = blob
-        existing.status = CredentialStatus.DEMO.value
-        session.add(existing)
+        session.add(row)
+        session.flush()
+        return row
+    existing.auth_blob_encrypted = blob
+    existing.status = CredentialStatus.DEMO.value
+    session.add(existing)
     session.flush()
-
-
-def _load_shopify_fixture() -> list[dict[str, Any]]:
-    payload = json.loads(_SHOPIFY_FIXTURE.read_text(encoding="utf-8"))
-    data: list[dict[str, Any]] = payload["data"]
-    return data
+    return existing

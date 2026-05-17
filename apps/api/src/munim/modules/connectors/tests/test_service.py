@@ -73,13 +73,16 @@ def test_connect_demo_is_idempotent_on_repeated_call(
     assert view_again.status is CredentialStatus.DEMO
 
 
-async def test_sync_writes_three_records_and_returns_meaningful_counts(
+_SHOPIFY_FIXTURE_ROW_COUNT = 6
+
+
+async def test_sync_writes_fixture_rows_and_returns_meaningful_counts(
     session: Session,
 ) -> None:
     # End-to-end through the service: a sync after connect must produce
-    # exactly three rows (fixture has 3 orders) and the SyncResult counts
-    # must agree with the DB. If counts and DB disagree, every downstream
-    # number on the UI is a lie.
+    # one record per fixture order and the SyncResult counts must agree
+    # with the DB. If counts and DB disagree, every downstream number on
+    # the UI is a lie.
     connect_demo(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY, default_registry())
     session.commit()
 
@@ -88,16 +91,17 @@ async def test_sync_writes_three_records_and_returns_meaningful_counts(
     )
     session.commit()
 
-    assert result.rows_upserted == 3
+    assert result.rows_upserted == _SHOPIFY_FIXTURE_ROW_COUNT
     assert result.rows_skipped == 0
     assert result.connector.status is CredentialStatus.DEMO
+    assert result.connector.last_sync_at is not None
     counts = {c.entity_type: c.count for c in result.connector.record_counts}
-    assert counts.get("order") == 3
+    assert counts.get("order") == _SHOPIFY_FIXTURE_ROW_COUNT
 
 
-async def test_sync_second_run_reports_three_skipped(session: Session) -> None:
+async def test_sync_second_run_reports_all_rows_skipped(session: Session) -> None:
     # The idempotency contract from Phase 2 must be observable at the API
-    # surface, not just inside RowSink. If the UI says "3 rows synced" on
+    # surface, not just inside RowSink. If the UI says "N rows synced" on
     # every click, users won't trust the system.
     connect_demo(session, DEFAULT_MERCHANT_ID, ConnectorName.SHOPIFY, default_registry())
     session.commit()
@@ -108,7 +112,7 @@ async def test_sync_second_run_reports_three_skipped(session: Session) -> None:
     )
     session.commit()
     assert second.rows_upserted == 0
-    assert second.rows_skipped == 3
+    assert second.rows_skipped == _SHOPIFY_FIXTURE_ROW_COUNT
 
 
 async def test_sync_raises_when_credential_missing(session: Session) -> None:

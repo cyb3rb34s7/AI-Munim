@@ -11,7 +11,6 @@ Real credential blob shape (Phase 4):
 import json
 from collections.abc import Iterable
 from datetime import UTC, datetime
-from pathlib import Path
 
 import httpx
 from cryptography.exceptions import InvalidTag
@@ -48,10 +47,6 @@ from munim.shared.crypto import (
     verify_state,
 )
 from munim.shared.errors import MunimError
-
-# apps/api/src/munim/modules/connectors/service.py
-# -> apps/api/
-_API_ROOT = Path(__file__).parents[4]
 
 
 class ConnectorNotConnectedError(MunimError):
@@ -124,8 +119,7 @@ def connect_demo(
             ),
             details={"connector": name.value, "use_endpoint": "/connect-demo"},
         )
-    fixture_path = _resolve_demo_fixture_path(name)
-    blob = {"status": CredentialStatus.DEMO.value, "fixture_path": str(fixture_path)}
+    blob = {"status": CredentialStatus.DEMO.value}
 
     existing = session.exec(
         select(ConnectorCredentials)
@@ -363,7 +357,3 @@ def _record_counts(
 
 def _connector_to_source(name: ConnectorName) -> SourceSystem:
     return SourceSystem(name.value)
-
-
-def _resolve_demo_fixture_path(name: ConnectorName) -> Path:
-    return _API_ROOT / "data" / "fixtures" / name.value / "orders.json"

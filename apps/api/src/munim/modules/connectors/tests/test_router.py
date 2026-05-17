@@ -25,22 +25,21 @@ def test_connect_then_list_shows_demo_status(auth_client: AuthClient) -> None:
     assert shopify["status"] == "demo"
 
 
-def test_sync_returns_three_upserts_and_updates_counts(auth_client: AuthClient) -> None:
+def test_sync_against_seeded_fixture_reports_all_skipped(auth_client: AuthClient) -> None:
     # End-to-end at the HTTP boundary: connect → sync → counts visible.
     # If this passes, the demo works for a reviewer with no Python repl.
-    # NOTE: auth_client.client starts pre-seeded with 96 rows from
-    # /auth/start. The Shopify connect-then-sync path here uses the
-    # legacy /connectors/shopify/connect endpoint which loads from
-    # apps/api/data/fixtures/shopify/orders.json (3 orders). Those 3
-    # orders have distinct source_ids from the Phase 9 seed fixture, so
-    # the upsert count is exactly 3.
+    # auth_client.client starts pre-seeded with 96 rows from /auth/start,
+    # including 6 Shopify orders from the package fixture. The legacy
+    # /connectors/shopify/connect-then-sync now reads the SAME package
+    # fixture, so every row matches and gets skipped — that's the
+    # idempotency contract observed at the HTTP surface.
     auth_client.client.post("/api/connectors/shopify/connect").raise_for_status()
 
     sync_response = auth_client.client.post("/api/connectors/shopify/sync")
     assert sync_response.status_code == 200
     sync_body = sync_response.json()
-    assert sync_body["data"]["rows_upserted"] == 3
-    assert sync_body["data"]["rows_skipped"] == 0
+    assert sync_body["data"]["rows_upserted"] == 0
+    assert sync_body["data"]["rows_skipped"] == 6
 
 
 def test_sync_without_connect_returns_typed_error_envelope(auth_client: AuthClient) -> None:
