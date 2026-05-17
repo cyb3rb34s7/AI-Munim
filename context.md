@@ -8,7 +8,9 @@
 
 ## Now
 
-Final-polish pass before deploy (2026-05-17). Tasks 1–3 done.
+Final-polish pass before deploy (2026-05-17). Tasks 1–4 done; ready for manual smoke + deploy.
+
+Task 4 (chat polish): Suggestion chips persist below the message list after first interaction (smaller pill style + "Try also:" label, horizontally scrollable). Thinking indicator augmented with a 1.5s-cycling phrase line under the bouncing dots: "Looking up your data…" → "Cross-referencing shipment history…" → "Composing answer…". Cosmetic only — no streaming integration, deliberately out of scope. AnimatePresence with mode="wait" handles the fade between phrases.
 
 Task 3 (records page polish): Backend default `limit` bumped from 50 → 200 so Shiprocket's 50 fresh rows don't bury the older 6 Shopify + 40 Meta rows on the first page. New `fmtIST` utility renders fetched_at as IST (en-IN locale). Source chips (All / Shopify / Meta Ads / Shiprocket) drive `source_system` query param. Friendly source labels + colored dots (lavender Shopify, pop-amber Meta, success-green Shiprocket) + friendly entity labels (Order/Shipment/Ad spend). Empty state offers a link to `/onboarding`. Honest "Showing first 200 — sync filtering coming soon" notice when the table hits the cap. RECORDS_LIST_QUERY_KEY became a function of the filter; useSyncMutation invalidates the bare `['records']` prefix to catch all variants.
 

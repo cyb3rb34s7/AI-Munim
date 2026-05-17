@@ -19,6 +19,23 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-17 — persistent chat suggestions + thinking indicator
+
+**What changed:** Two cosmetic touches in `apps/web/src/modules/chat/components/MessageList.tsx`.
+
+- Suggestion chips no longer disappear after the first message. They render below the message list with a "Try also:" label, smaller / pill-shaped, horizontally scrollable. The empty-state still surfaces them as larger buttons.
+- The pending typing indicator now shows a cycling phrase line under the bouncing dots — "Looking up your data…" → "Cross-referencing shipment history…" → "Composing answer…" — rotating every 1.5s. AnimatePresence with `mode="wait"` handles the fade.
+
+**Why:** Cosmetic but agentic. The chat agent is real (LLM + tools), but during the 2–5s wait the UI gave no signal. Cycling status phrases make the wait feel like reasoning, not loading. The persistent chips lower the friction of "what do I ask next" once the user has used the first prompt.
+
+**Important non-claim:** the phrases are NOT tied to the actual tool calls. We do not stream the LLM's tool-call events to the frontend in v0; integrating that would be a real feature. Per the brief, this is cosmetic only.
+
+**Files touched:** `apps/web/src/modules/chat/components/MessageList.tsx`.
+
+**Reverts cleanly?:** yes.
+
+---
+
 ## 2026-05-17 — records page — IST dates, source chips, friendly labels
 
 **What changed:** The records table moves from "ISO blob + raw lowercase source string + 50-row cap" to a legible, filterable view.
