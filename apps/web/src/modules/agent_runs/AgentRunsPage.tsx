@@ -3,6 +3,7 @@ import { useAgentRuns } from '@/modules/agent_runs/hooks/useAgentRuns';
 import { RunsTable } from './components/RunsTable';
 import { RunDetailSheet } from './components/RunDetailSheet';
 import { TriggerAgentButton } from './components/TriggerAgentButton';
+import { RunBriefingButton } from './components/RunBriefingButton';
 
 const RUN_PARAM = 'run';
 
@@ -29,14 +30,17 @@ export function AgentRunsPage() {
 
   return (
     <div className="mx-auto max-w-5xl p-8 flex flex-col gap-6">
-      <header className="flex items-end justify-between gap-4">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-fg">Agent runs</h1>
           <p className="mt-1 text-sm text-fg-muted">
-            Audit log of every scan. Click a row to see the full per-order reasoning.
+            Audit log of every agent run. Click a row to see the full reasoning.
           </p>
         </div>
-        <TriggerAgentButton />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <TriggerAgentButton />
+          <RunBriefingButton />
+        </div>
       </header>
 
       <RunsTable runs={data?.items} isLoading={isLoading} error={error} onOpenRun={openRun} />
