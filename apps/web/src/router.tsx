@@ -6,6 +6,7 @@ import { ChatPage } from '@/modules/chat/ChatPage';
 import { AgentRunsPage } from '@/modules/agent_runs/AgentRunsPage';
 import { LandingPage } from '@/pages/LandingPage';
 import { StartPage } from '@/pages/StartPage';
+import { OnboardingPage } from '@/pages/OnboardingPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { ProtectedRoute } from '@/modules/auth';
 import { AppShell } from '@/shared/layout/AppShell';
@@ -13,6 +14,14 @@ import { AppShell } from '@/shared/layout/AppShell';
 export const router = createBrowserRouter([
   { path: '/', element: <LandingPage /> },
   { path: '/start', element: <StartPage /> },
+  {
+    path: '/onboarding',
+    element: (
+      <ProtectedRoute>
+        <OnboardingPage />
+      </ProtectedRoute>
+    ),
+  },
   {
     path: '/',
     element: (

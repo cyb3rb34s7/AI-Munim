@@ -3,12 +3,21 @@ from fastapi.testclient import TestClient
 
 
 def test_records_list_after_seed_has_96_rows(auth_client: AuthClient) -> None:
-    # /auth/start seeds 96 rows (6 Shopify + 40 Meta + 50 Shiprocket).
-    # The records list paginates at limit=50 by default; bump to 200 for
-    # the smoke assert.
+    # auth_client posts /auth/start + /auth/onboard, which seeds 96 rows
+    # (6 Shopify + 40 Meta + 50 Shiprocket). The records list paginates at
+    # limit=50 by default; bump to 200 for the smoke assert.
     body = auth_client.client.get("/api/records?limit=200").json()
     assert body["success"] is True
     assert len(body["data"]["items"]) == 96
+
+
+def test_records_list_filters_by_source_system(auth_client: AuthClient) -> None:
+    # The Records page filter chips set source_system; the backend must
+    # honour it. If silently ignored, the chip is a placebo.
+    body = auth_client.client.get("/api/records?source_system=shiprocket&limit=200").json()
+    items = body["data"]["items"]
+    assert len(items) == 50
+    assert {item["source_system"] for item in items} == {"shiprocket"}
 
 
 def test_records_list_filters_by_entity_type(auth_client: AuthClient) -> None:
@@ -58,6 +67,7 @@ def test_two_merchants_records_are_isolated(auth_client: AuthClient) -> None:
 
     with _TestClient(create_app()) as b:
         b.post("/api/auth/start", json={"display_name": "B"}).raise_for_status()
+        b.post("/api/auth/onboard").raise_for_status()
         b_body = b.get("/api/records?limit=200").json()
         b_ids = {item["id"] for item in b_body["data"]["items"]}
 

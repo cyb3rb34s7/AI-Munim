@@ -11,6 +11,14 @@ export const currentUserSchema = z.object({
 
 export type CurrentUser = z.infer<typeof currentUserSchema>;
 
+export const onboardingResultSchema = z.object({
+  shopify_rows: z.number().int().nonnegative(),
+  meta_ads_rows: z.number().int().nonnegative(),
+  shiprocket_rows: z.number().int().nonnegative(),
+});
+
+export type OnboardingResult = z.infer<typeof onboardingResultSchema>;
+
 export interface StartDemoInput {
   display_name?: string;
 }
@@ -19,6 +27,11 @@ export async function startDemo(input: StartDemoInput): Promise<CurrentUser> {
   const response = await apiPost('/auth/start', currentUserSchema, {
     json: input,
   });
+  return response.data;
+}
+
+export async function onboard(): Promise<OnboardingResult> {
+  const response = await apiPost('/auth/onboard', onboardingResultSchema);
   return response.data;
 }
 

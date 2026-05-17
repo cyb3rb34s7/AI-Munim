@@ -1,34 +1,36 @@
 """Per-merchant demo seeding.
 
-POST /auth/start calls `seed_new_merchant(session, merchant_id)` so every
-fresh visitor lands on a pre-populated workspace: 6 Shopify orders + 40
-Meta Ads insights + 50 Shiprocket shipments. Cross-connector customer
-hashes line up so the agent's customer-RTO signal fires immediately on
-the first run.
+POST /auth/onboard calls `seed_new_merchant(session, merchant_id)` so a
+fresh visitor explicitly opts into a pre-populated workspace: 6 Shopify
+orders + 40 Meta Ads insights + 50 Shiprocket shipments. Cross-connector
+customer hashes line up so the agent's customer-RTO signal fires
+immediately on the first run.
 
 Seeding is idempotent: the RowSink natural key
 `(merchant_id, source_system, source_id)` collapses any duplicate insert
 into an update; calling this twice on the same merchant writes zero new
-rows.
+rows. The returned `OnboardingResult` reflects the rows the merchant
+OWNS (count after seed), not the upsert delta of the last call, so the
+UI's "Synced N orders" line is meaningful on a repeat onboard.
 
 Every connector runs through `sync_full` so the credentials row's
-`last_sync_at` is stamped — without that, a subsequent click on
-"Sync now" in the UI is the user's first observation that the row was
-ever populated.
+`last_sync_at` is stamped.
 """
 
 import json
 from datetime import UTC, datetime
 
 import httpx
-from sqlmodel import Session, select
+from sqlalchemy import func
+from sqlmodel import Session, col, select
 
 from munim.connectors._row_sink import RowSink
 from munim.connectors.base import BaseConnector, Credential, SyncContext
 from munim.connectors.meta_ads.connector import MetaAdsConnector
 from munim.connectors.shiprocket.connector import ShiprocketConnector
 from munim.connectors.shopify.connector import ShopifyConnector
-from munim.models import ConnectorCredentials
+from munim.models import ConnectorCredentials, Record
+from munim.modules.auth.schemas import OnboardingResult
 from munim.shared.constants import (
     ConnectorName,
     CredentialStatus,
@@ -36,13 +38,18 @@ from munim.shared.constants import (
 )
 
 
-async def seed_new_merchant(session: Session, merchant_id: str) -> None:
+async def seed_new_merchant(session: Session, merchant_id: str) -> OnboardingResult:
     await _seed_demo_connector(session, merchant_id, ConnectorName.SHOPIFY, ShopifyConnector())
     await _seed_demo_connector(session, merchant_id, ConnectorName.META_ADS, MetaAdsConnector())
     await _seed_demo_connector(
         session, merchant_id, ConnectorName.SHIPROCKET, ShiprocketConnector()
     )
     session.flush()
+    return OnboardingResult(
+        shopify_rows=_count_rows(session, merchant_id, SourceSystem.SHOPIFY),
+        meta_ads_rows=_count_rows(session, merchant_id, SourceSystem.META_ADS),
+        shiprocket_rows=_count_rows(session, merchant_id, SourceSystem.SHIPROCKET),
+    )
 
 
 async def _seed_demo_connector(
@@ -97,3 +104,12 @@ def _upsert_demo_credential(
     session.add(existing)
     session.flush()
     return existing
+
+
+def _count_rows(session: Session, merchant_id: str, source: SourceSystem) -> int:
+    result = session.exec(
+        select(func.count(col(Record.id)))
+        .where(Record.merchant_id == merchant_id)
+        .where(Record.source_system == source.value)
+    ).one()
+    return int(result)

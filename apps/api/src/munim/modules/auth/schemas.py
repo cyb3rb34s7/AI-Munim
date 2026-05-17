@@ -16,3 +16,11 @@ class CurrentUser(BaseModel):
     user_id: str
     display_name: str
     created_at: datetime
+
+
+class OnboardingResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    shopify_rows: int
+    meta_ads_rows: int
+    shiprocket_rows: int

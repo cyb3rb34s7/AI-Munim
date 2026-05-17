@@ -92,9 +92,10 @@ def test_two_merchants_see_independent_connector_state(auth_client: AuthClient) 
 
     with _TestClient(create_app()) as b:
         b.post("/api/auth/start", json={"display_name": "Bravo"}).raise_for_status()
+        b.post("/api/auth/onboard").raise_for_status()
         b_body = b.get("/api/connectors").json()
         b_shopify = next(c for c in b_body["data"]["connectors"] if c["name"] == "shopify")
-        # Merchant B's Shopify counts come from the Phase 9 seed only — 6 orders.
+        # Merchant B's Shopify counts come from the onboarding seed only — 6 orders.
         order_count = next(
             (c["count"] for c in b_shopify["record_counts"] if c["entity_type"] == "order"),
             0,

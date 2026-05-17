@@ -115,3 +115,51 @@ def test_two_distinct_starts_produce_distinct_merchants() -> None:
         body_b = b.post("/api/auth/start", json={"display_name": "Beta"}).json()
         assert body_a["data"]["merchant_id"] != body_b["data"]["merchant_id"]
         assert body_a["data"]["user_id"] != body_b["data"]["user_id"]
+
+
+def test_start_does_not_pre_seed_any_records() -> None:
+    # The onboarding wizard owns the seed opt-in. A user who lands at
+    # /start must NOT silently get demo data — they pick "Connect demo
+    # data" on /onboarding for that. If this regression slips, the
+    # wizard's whole reason for being collapses.
+    with _build_client() as client:
+        client.post("/api/auth/start", json={"display_name": "Quiet"}).raise_for_status()
+        records = client.get("/api/records").json()
+        assert records["data"]["items"] == []
+
+
+def test_onboard_seeds_three_connectors_and_returns_counts() -> None:
+    with _build_client() as client:
+        client.post("/api/auth/start", json={"display_name": "Wanda"}).raise_for_status()
+        response = client.post("/api/auth/onboard")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["data"] == {
+            "shopify_rows": 6,
+            "meta_ads_rows": 40,
+            "shiprocket_rows": 50,
+        }
+
+
+def test_onboard_is_idempotent_on_second_call() -> None:
+    # Re-running the wizard must not double-seed. The repeat call returns
+    # the SAME row counts (each connector's natural-key upsert collapses
+    # duplicates), proving the user can land back on /onboarding from a
+    # bookmark without corrupting their workspace.
+    with _build_client() as client:
+        client.post("/api/auth/start", json={"display_name": "Repeat"}).raise_for_status()
+        first = client.post("/api/auth/onboard").json()["data"]
+        second = client.post("/api/auth/onboard").json()["data"]
+        assert first == second == {
+            "shopify_rows": 6,
+            "meta_ads_rows": 40,
+            "shiprocket_rows": 50,
+        }
+
+
+def test_onboard_without_session_returns_401() -> None:
+    with _build_client() as client:
+        response = client.post("/api/auth/onboard")
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == "auth.unauthenticated"

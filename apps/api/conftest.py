@@ -77,7 +77,15 @@ class AuthClient:
 
 @pytest.fixture
 def auth_client() -> Generator[AuthClient, None, None]:
-    """TestClient with a freshly minted session cookie for a new merchant."""
+    """TestClient with a freshly minted session cookie + onboarded demo data.
+
+    /auth/start no longer seeds (the onboarding wizard owns that opt-in
+    step). For test ergonomics we call /auth/onboard here so existing
+    protected-endpoint tests continue to see the 96 pre-seeded rows they
+    were written against. Tests that need an empty workspace can use the
+    anonymous `client` fixture and call /api/auth/start directly without
+    a follow-up /api/auth/onboard.
+    """
     from munim.main import create_app
 
     app = create_app()
@@ -85,6 +93,7 @@ def auth_client() -> Generator[AuthClient, None, None]:
         response = test_client.post("/api/auth/start", json={"display_name": "Test User"})
         response.raise_for_status()
         body = response.json()
+        test_client.post("/api/auth/onboard").raise_for_status()
         yield AuthClient(
             client=test_client,
             merchant_id=body["data"]["merchant_id"],

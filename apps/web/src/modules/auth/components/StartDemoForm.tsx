@@ -21,7 +21,7 @@ export function StartDemoForm() {
       { display_name: trimmed || undefined },
       {
         onSuccess: () => {
-          navigate('/chat');
+          navigate('/onboarding');
         },
         onError: (error) => {
           const message = error instanceof ApiError ? error.message : 'Could not start demo.';

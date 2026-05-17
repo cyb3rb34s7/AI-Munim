@@ -19,6 +19,24 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-17 — onboarding wizard with animated demo seed
+
+**What changed:** The demo-data opt-in moves from "silently pre-seeded by `/auth/start`" to "explicit step in the onboarding wizard."
+
+- Backend: `POST /auth/start` no longer calls `seed_new_merchant`. New `POST /auth/onboard` runs the same seed and returns `{shopify_rows, meta_ads_rows, shiprocket_rows}` (typed `OnboardingResult`). The result reflects rows the merchant OWNS post-seed, not the upsert delta of the last call — so a re-run from a bookmark shows the same numbers.
+- Frontend: new `/onboarding` route (ProtectedRoute-wrapped). `OnboardingPage.tsx` calls the onboard mutation, then animates each of the three connector cards in sequence (~700ms apart) for an agentic feel. Idempotency: on mount, if `useConnectors()` reports all three sources as `status === 'demo'` with non-null `last_sync_at`, the page jumps straight to the success view. CTA flips to a "Go to chat →" link when all cards are green.
+- `StartPage` redirect after `/auth/start` is now `/onboarding`, not `/chat`.
+- `auth_client` test fixture posts `/auth/start` + `/auth/onboard` so existing protected-endpoint tests continue to see the 96 seeded rows; tests that need an empty workspace use the anonymous `client` fixture.
+- Five new auth-router tests: `start` does not pre-seed; `onboard` returns correct counts; `onboard` is idempotent; `onboard` returns 401 without a session.
+
+**Why:** A reviewer landing on /start expects to choose whether to load demo data. Silent pre-seeding hides the connectors story (the brief's third axis) behind a request the user didn't make. The wizard surfaces the three connectors visually, makes the seed legible, and gives the demo a first-impression moment.
+
+**Files touched:** `apps/api/src/munim/modules/auth/{router,seed,schemas}.py`, `apps/api/src/munim/modules/auth/tests/test_router.py`, `apps/api/conftest.py`, `apps/web/src/pages/OnboardingPage.tsx`, `apps/web/src/router.tsx`, `apps/web/src/modules/auth/{api/client.ts,hooks/useAuth.ts,index.ts,components/StartDemoForm.tsx}`.
+
+**Reverts cleanly?:** yes.
+
+---
+
 ## 2026-05-17 — shopify demo sync loads package fixture, last_sync_at stamps
 
 **What changed:** Two coupled bug fixes that landed Phase 9's Shopify demo path on the same shape Meta and Shiprocket already used.
