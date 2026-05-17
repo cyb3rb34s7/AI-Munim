@@ -19,6 +19,16 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-17 — phase 11 hotfix 2 — cap briefing tool loop, tighten prompt
+
+**What changed:** Added `UsageLimits(request_limit=12)` to the briefing agent's `agent.run(...)` call. New typed `LLMUnavailableError` mapping for `UsageLimitExceeded`. Rewrote the system-prompt workflow as directive: "ONE unfiltered pass + at most one filtered follow-up per tool; compose with what you have; do not re-query."
+
+**Why:** First production run after the session-lock fix surfaced a different failure mode — `gpt-4o-mini` re-queried `query_orders(cod, pending)` and `query_shipments(rto, pincode=700001)` ~15 times in a loop until OpenAI returned 429. The model was over-exploring (chasing rows that didn't exist), not stuck on a real reasoning step. Two-part fix: prompt tells the model to make one pass; UsageLimits guarantees the loop terminates regardless.
+
+**Files touched:** `apps/api/src/munim/agents/daily_briefing/agent.py` (prompt), `apps/api/src/munim/agents/daily_briefing/service.py` (UsageLimits + typed error mapping).
+
+**Reverts cleanly?:** yes — small additive change.
+
 ## 2026-05-17 — phase 11 hotfix — serialise chat-tool DB access against PydanticAI parallel tool calls
 
 **What changed:** Added `session_lock: threading.Lock` to `ChatContext` (default-factoryed per request). Every tool in `chat/tools.py` now runs its DB section inside `with ctx.session_lock:`. Fixes the SQLAlchemy `InvalidRequestError: This session is provisioning a new connection; concurrent operations are not permitted` that surfaced on the first real LLM run of the daily-briefing agent on Render.

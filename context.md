@@ -79,6 +79,16 @@ Ranking re-evaluated at the start of each new phase.
 
 Every entry is a paid lesson. Read at the start of every session. Never repeat one.
 
+### 2026-05-17 (Phase 11 hotfix 2) — gpt-4o-mini re-queried identical filters in a loop until OpenAI 429'd
+
+**Problem:** Second production run of the daily-briefing agent (post-session-lock fix). The LLM completed one good scanning pass (3 unfiltered tool calls), did one good filtered follow-up pass (3 filtered calls), then got stuck: it kept re-querying `query_orders(payment_method=cod, financial_status=pending)` (returns 2 rows) and `query_shipments(fulfillment_status=rto, pincode=700001)` (returns 0 rows) ~15 times until OpenAI returned 429 Too Many Requests.
+
+**Root cause:** Two causes, both prompt-induced. (1) The original WORKFLOW said `4. Cross-reference: find customers with high RTO history, campaigns with weak ROAS, COD orders to flagged pincodes` — the model interpreted "find" as "keep searching", with no termination signal. (2) No `UsageLimits` on the agent run, so the loop only ended when OpenAI rate-limited us. Compounded by the citation contract — the model knew it needed to cite numbers and kept hoping the next query would yield citable rows.
+
+**Solution:** Two-part fix. (a) Rewrote the workflow as directive: "ONE unfiltered pass + at most one filtered follow-up per tool; compose with what you have; do not re-query identical filters; ~6 tool calls total max." (b) Added `UsageLimits(request_limit=12)` to the briefing agent's `agent.run(...)`. Added typed `UsageLimitExceeded → LLMUnavailableError` mapping in `daily_briefing.service` so loop-exhaustion surfaces to the user as `chat.llm_unavailable` instead of leaking as `system.unexpected`.
+
+**Guardrail:** Every PydanticAI agent that hits an external paid LLM MUST run with a `UsageLimits` cap and MUST handle `UsageLimitExceeded` explicitly. Tool loops are a known failure mode; this is the seatbelt. The chat agent's loop has been protected by its sequential workflow prompt — but the same `UsageLimits` should be added there opportunistically when we touch that surface.
+
 ### 2026-05-17 (Phase 11 hotfix) — PydanticAI parallel tool calls race a single SQLAlchemy Session → `InvalidRequestError: concurrent operations are not permitted`
 
 **Problem:** First production run of the daily-briefing agent on Render (Postgres) crashed with `sqlalchemy.exc.InvalidRequestError: This session is provisioning a new connection; concurrent operations are not permitted`. Tool-call timestamps in the structured log proved the race: `query_ad_spend` invoked at `T+0μs`, `query_orders` invoked at `T+460μs`, crash at `T+930μs`. The LLM emitted three tool calls in a single response and they ran simultaneously against one shared Session.

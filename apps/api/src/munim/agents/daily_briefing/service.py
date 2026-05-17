@@ -18,9 +18,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import httpx
-from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior
+from pydantic_ai.exceptions import (
+    ModelHTTPError,
+    UnexpectedModelBehavior,
+    UsageLimitExceeded,
+)
 from pydantic_ai.messages import ToolReturnPart
 from pydantic_ai.models import Model
+from pydantic_ai.usage import UsageLimits
 from sqlmodel import Session
 from ulid import ULID
 
@@ -72,10 +77,34 @@ async def run_briefing(
     ctx = ChatContext(merchant_id=merchant_id, session=session, trace_id=trace_id)
     agent = build_agent(sector, model=model_override)
 
+    # Hard cap on LLM turns. With our 3 tools and a directive prompt, a
+    # healthy run takes 3-6 turns. 12 leaves headroom for one re-think, but
+    # cuts off the pathological "keep re-querying the same filter" loop
+    # that gpt-4o-mini occasionally falls into.
+    usage_limits = UsageLimits(request_limit=12)
+
     try:
-        run_result = await agent.run("Compose this week's briefing.", deps=ctx)
+        run_result = await agent.run(
+            "Compose this week's briefing.",
+            deps=ctx,
+            usage_limits=usage_limits,
+        )
     except MunimError:
         raise
+    except UsageLimitExceeded as exc:
+        log.warning(
+            "agent.run.tool_loop_exhausted",
+            agent=AgentName.DAILY_BRIEFING.value,
+            run_id=run_id,
+            exc_str=str(exc)[:200],
+        )
+        raise LLMUnavailableError(
+            message=(
+                "The model couldn't converge on a briefing within the tool-call "
+                "budget. Try again."
+            ),
+            details={"exc_type": "UsageLimitExceeded", "exc_str": str(exc)[:500]},
+        ) from exc
     except (ModelHTTPError, UnexpectedModelBehavior, httpx.HTTPError) as exc:
         log.warning(
             "agent.run.llm_unavailable",
