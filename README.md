@@ -2,7 +2,7 @@
 
 > Every kirana shop had a munim — the bookkeeper who sat in the corner, kept all the ledgers, watched the stock, advised on margins, and noticed when something was off. Modern D2C founders have Excel and vibes. AI-Munim is the modern munim: an AI employee for Indian D2C brands that reads across their SaaS tools, answers cross-tool questions with citations on every number, and proactively flags ₹-saving actions.
 
-**Try the live demo:** open the deployed URL, click "Try the live demo", optionally type a display name, and you land on a private workspace pre-populated with realistic Shopify, Meta Ads, and Shiprocket data. No sign-up.
+**Try the live demo:** [**https://ai-munim.rajakumarsingh.com**](https://ai-munim.rajakumarsingh.com) — click "Try the live demo", optionally type a display name, and you land on a private workspace pre-populated with realistic Shopify, Meta Ads, and Shiprocket data. No sign-up.
 
 ---
 
@@ -46,7 +46,7 @@ The stack is hybrid: **Python FastAPI for the backend** (PydanticAI, SQLite + JS
 
 ## Try the live demo
 
-Open the deployed URL (Render) and click **Try the live demo**. Reasonable walk:
+[**https://ai-munim.rajakumarsingh.com**](https://ai-munim.rajakumarsingh.com) — click **Try the live demo**. Reasonable walk:
 
 1. Land on the chat page. Ask "How many orders do I have?" — the response cites 6 orders from Shopify.
 2. Hit `/agents` and click "Run agent now". A row appears in the feed; click it to see the per-order decisions. `rohan@example.com`'s COD order (₹4,599 to pincode 110001, 22:48 IST) proposes `convert_to_prepaid` with the cross-connector RTO history driving the score.
