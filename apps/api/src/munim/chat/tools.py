@@ -13,7 +13,8 @@ middleware) so a debugging operator can grep one trace across HTTP →
 tool calls → DB writes.
 """
 
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -48,11 +49,21 @@ class ChatContext:
     """Bag of dependencies the tools share. Passed into each tool by the
     agent's `RunContext`. `trace_id` is set from `request.state.trace_id`
     so tool writes can record it (§5.2).
+
+    `session_lock` serialises DB access across tool calls. PydanticAI
+    executes sync tools in worker threads via `anyio.to_thread.run_sync`;
+    when the LLM emits multiple tool calls in a single response (parallel
+    tool-use), all worker threads share this `Session`, and SQLAlchemy
+    raises `InvalidRequestError: concurrent operations are not permitted`.
+    Every tool function MUST hold `session_lock` for the duration of its
+    DB interaction. Production traceback that surfaced this:
+    https://github.com/.../issues/N (Phase 11 daily-briefing).
     """
 
     merchant_id: str
     session: Session
     trace_id: str | None = None
+    session_lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 def _row_to_citation(row: Record, fields: list[str] | None = None) -> RowCitation:
@@ -96,7 +107,8 @@ def query_orders(
         .where(Record.entity_type == EntityType.ORDER.value)
         .order_by(col(Record.fetched_at).desc())
     )
-    rows = ctx.session.exec(stmt).all()
+    with ctx.session_lock:
+        rows = ctx.session.exec(stmt).all()
 
     def matches(row: Record) -> bool:
         n = row.normalized
@@ -149,7 +161,8 @@ def query_shipments(
         .where(Record.entity_type == EntityType.SHIPMENT.value)
         .order_by(col(Record.fetched_at).desc())
     )
-    rows = ctx.session.exec(stmt).all()
+    with ctx.session_lock:
+        rows = ctx.session.exec(stmt).all()
 
     def matches(row: Record) -> bool:
         n = row.normalized
@@ -209,7 +222,8 @@ def query_ad_spend(
         .where(Record.entity_type == EntityType.AD_SPEND.value)
         .order_by(col(Record.fetched_at).desc())
     )
-    rows = ctx.session.exec(stmt).all()
+    with ctx.session_lock:
+        rows = ctx.session.exec(stmt).all()
 
     def matches(row: Record) -> bool:
         n = row.normalized
@@ -312,12 +326,12 @@ def propose_action(
             "trace_id": ctx.trace_id,
         },
     )
-    ctx.session.add(run)
-    ctx.session.flush()
-
-    evidence_rows = ctx.session.exec(
-        select(Record).where(col(Record.id).in_(evidence_record_ids))
-    ).all()
+    with ctx.session_lock:
+        ctx.session.add(run)
+        ctx.session.flush()
+        evidence_rows = ctx.session.exec(
+            select(Record).where(col(Record.id).in_(evidence_record_ids))
+        ).all()
     citations = [_row_to_citation(r) for r in evidence_rows]
 
     log.info(

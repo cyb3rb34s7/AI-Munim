@@ -19,6 +19,16 @@ Multiple entries on the same day are fine; keep newest at the top of that day's 
 
 ---
 
+## 2026-05-17 — phase 11 hotfix — serialise chat-tool DB access against PydanticAI parallel tool calls
+
+**What changed:** Added `session_lock: threading.Lock` to `ChatContext` (default-factoryed per request). Every tool in `chat/tools.py` now runs its DB section inside `with ctx.session_lock:`. Fixes the SQLAlchemy `InvalidRequestError: This session is provisioning a new connection; concurrent operations are not permitted` that surfaced on the first real LLM run of the daily-briefing agent on Render.
+
+**Why:** PydanticAI fans sync tools out to worker threads via `anyio.to_thread.run_sync`. When the LLM emits multiple tool calls in a single response (parallel tool-use), every worker thread races on the same SQLAlchemy `Session`. Latent bug from Phase 5; the chat agent's sequential-by-prompt workflow hid it, the briefing's "Call query_orders, query_shipments, query_ad_spend" invited it. Local SQLite + `check_same_thread=False` masked the race; Postgres + a fast LLM exposed it.
+
+**Files touched:** `apps/api/src/munim/chat/tools.py` (added Lock, wrapped each tool's `ctx.session.exec(...)` block), `context.md` (Problems & solutions entry), `CHANGELOG.md`.
+
+**Reverts cleanly?:** yes — single dataclass field + four `with` blocks.
+
 ## 2026-05-17 — phase 11 — daily-briefing agent (second agent, LLM-driven, sector-aware)
 
 **What changed:** Shipped a second autonomous agent — `daily_briefing` — alongside the deterministic `rto_mitigator`. The new agent is a PydanticAI Agent that composes a 7-day plain-English narrative + 0–3 proposed actions, every numeric claim cited to a real `record` row via the same enforcer the chat layer uses. Sector is a per-run input (frontend dropdown → backend `?sector=` query param, 6 values: `fashion`, `beauty`, `fmcg`, `electronics`, `home`, `generic`); each sector splices a "watch for X" hint into the system prompt.
