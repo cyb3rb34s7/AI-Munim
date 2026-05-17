@@ -11,10 +11,11 @@ import {
 import { useAgentRun } from '@/modules/agent_runs/hooks/useAgentRun';
 import { AgentAction, type AgentRunDecision } from '@/modules/agent_runs/api/client';
 import { ActionDonut } from './ActionDonut';
+import { BriefingDetail } from './BriefingDetail';
 import { fadeUp, stagger } from '@/shared/utils/motion';
 import { ApiError } from '@/shared/api';
 import { inr, InvalidMoneyError } from '@/shared/utils/inr';
-import { agentDisplayName } from '@/shared/constants/agents';
+import { AgentName, agentDisplayName } from '@/shared/constants/agents';
 
 interface Props {
   runLogId: number | null;
@@ -360,7 +361,11 @@ export function RunDetailSheet({ runLogId, onOpenChange }: Props) {
             </div>
           )}
 
-          {data && (
+          {data && data.agent === AgentName.DAILY_BRIEFING && (
+            <BriefingDetail detail={data} />
+          )}
+
+          {data && data.agent !== AgentName.DAILY_BRIEFING && (
             <>
               <section className="rounded-lg border border-border bg-surface-subtle p-5">
                 {totalSaved && Number(totalSaved.replace(/[^\d.-]/g, '')) > 0 ? (
